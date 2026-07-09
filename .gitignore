@@ -7,3 +7,4 @@ Thumbs.db
 output/
 templates/
 bernhardt/
+.mcp-progress.json

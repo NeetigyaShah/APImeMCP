@@ -1,0 +1,23 @@
+import path from 'node:path';
+import { atomicWriteFile } from './storage.js';
+
+export interface ProgressState {
+  tool: string;
+  status: 'idle' | 'running' | 'done' | 'failed';
+  current: number;
+  total: number;
+  message: string;
+}
+
+function getProgressPath(): string {
+  return path.resolve(process.cwd(), '.mcp-progress.json');
+}
+
+export async function reportProgress(update: ProgressState): Promise<void> {
+  try {
+    await atomicWriteFile(getProgressPath(), JSON.stringify({ ...update, updatedAt: new Date().toISOString() }, null, 2));
+  } catch {
+    // ponytail: best-effort UI telemetry, must never crash the extraction/download it's reporting on
+    // (Windows can EPERM a rename() if the destination is open for read at that instant)
+  }
+}

@@ -23,6 +23,7 @@ import { batchDownload } from './downloader.js';
 import { logExtractionMetric, getExtractionStats } from './metrics.js';
 import { sendNotification } from './notifier.js';
 import { Scheduler } from './scheduler.js';
+import { reportProgress } from './progress.js';
 
 const RECENT_LOGS_LIMIT = 5;
 const recentLogs: string[] = [];
@@ -52,27 +53,29 @@ async function runExtraction(targetUrl: string, templateId?: string, proxyUrl?: 
     timestamp: new Date().toISOString(),
   });
 
+  await reportProgress({ tool: 'execute_native_extraction', status: 'running', current: 0, total: 1, message: targetUrl });
+
   try {
     const manifest = await loadManifest();
     const entry = templateId ? findTemplateById(manifest, templateId) : findTemplateByUrl(manifest, targetUrl);
 
     if (!entry) {
-      return {
-        success: false,
-        error: templateId
-          ? `No registered template with templateId "${templateId}"`
-          : `No registered template matches the domain for ${targetUrl}`,
-        meta: buildMeta(templateId ?? '', ''),
-      };
+      const error = templateId
+        ? `No registered template with templateId "${templateId}"`
+        : `No registered template matches the domain for ${targetUrl}`;
+      await reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message: error });
+      return { success: false, error, meta: buildMeta(templateId ?? '', '') };
     }
 
     const data = await executeExtraction({ targetUrl, scriptPath: entry.scriptPath, proxyUrl });
     const imageCount = Array.isArray(data) ? data.length : data ? 1 : 0;
     await logExtractionMetric(entry.templateId, targetUrl, imageCount);
+    await reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: targetUrl });
     return { success: true, data, meta: buildMeta(entry.templateId, entry.domainPattern) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logError(`execute_native_extraction failed: ${message}`);
+    await reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message });
     return { success: false, error: message, meta: buildMeta(templateId ?? '', '') };
   }
 }
@@ -142,10 +145,26 @@ server.tool('send_notification', SendNotificationShape, async (input) => {
 
 server.tool('batch_download_assets', BatchDownloadShape, async (input) => {
   try {
-    const results = await batchDownload(input.urls, input.outputDir);
+    await reportProgress({
+      tool: 'batch_download_assets',
+      status: 'running',
+      current: 0,
+      total: input.urls.length,
+      message: input.outputDir,
+    });
+    const results = await batchDownload(input.urls, input.outputDir, (current, total) => {
+      void reportProgress({ tool: 'batch_download_assets', status: 'running', current, total, message: input.outputDir });
+    });
     const succeeded = results.filter((r) => r.success).length;
     const failed = results.length - succeeded;
     log(`batch_download_assets: saved ${succeeded}/${results.length} files to "${input.outputDir}"`);
+    await reportProgress({
+      tool: 'batch_download_assets',
+      status: failed === 0 ? 'done' : 'failed',
+      current: succeeded,
+      total: results.length,
+      message: input.outputDir,
+    });
     return {
       content: [
         {
@@ -168,6 +187,13 @@ server.tool('batch_download_assets', BatchDownloadShape, async (input) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logError(`batch_download_assets failed: ${message}`);
+    await reportProgress({
+      tool: 'batch_download_assets',
+      status: 'failed',
+      current: 0,
+      total: input.urls.length,
+      message,
+    });
     return {
       content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: message }) }],
       isError: true,

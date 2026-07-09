@@ -31,7 +31,12 @@ export async function atomicWriteFile(filePath: string, data: string): Promise<v
   await fs.mkdir(dir, { recursive: true });
   const tmpPath = path.join(dir, `.${path.basename(filePath)}.tmp-${randomUUID()}`);
   await fs.writeFile(tmpPath, data, 'utf8');
-  await fs.rename(tmpPath, filePath);
+  try {
+    await fs.rename(tmpPath, filePath);
+  } catch (err) {
+    await fs.rm(tmpPath, { force: true });
+    throw err;
+  }
 }
 
 export async function saveManifest(manifest: Manifest): Promise<void> {

@@ -68,18 +68,25 @@ async function downloadOne(url: string, outputDir: string, usedNames: Set<string
   }
 }
 
-export async function batchDownload(urls: string[], outputDir: string): Promise<DownloadResult[]> {
+export async function batchDownload(
+  urls: string[],
+  outputDir: string,
+  onProgress?: (current: number, total: number) => void
+): Promise<DownloadResult[]> {
   await fs.mkdir(outputDir, { recursive: true });
 
   const results: DownloadResult[] = new Array(urls.length);
   const usedNames = new Set<string>();
   let nextIndex = 0;
+  let completed = 0;
 
   async function worker(): Promise<void> {
     for (;;) {
       const index = nextIndex++;
       if (index >= urls.length) return;
       results[index] = await downloadOne(urls[index], outputDir, usedNames);
+      completed++;
+      onProgress?.(completed, urls.length);
     }
   }
 
