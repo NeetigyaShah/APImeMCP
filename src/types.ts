@@ -11,7 +11,7 @@ const DomainPatternSchema = z
   .min(1, 'domainPattern must not be empty')
   .transform((value) => value.toLowerCase());
 
-function isHttpUrl(value: string): boolean {
+export function isHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
     return url.protocol === 'http:' || url.protocol === 'https:';
@@ -48,6 +48,28 @@ export const BatchDownloadShape = {
 
 export const BatchDownloadInputSchema = z.object(BatchDownloadShape);
 export type BatchDownloadInput = z.infer<typeof BatchDownloadInputSchema>;
+
+export const ScheduleStockCheckShape = {
+  targetUrl: ExecuteNativeExtractionShape.targetUrl,
+  templateId: ExecuteNativeExtractionShape.templateId,
+  cronExpression: z
+    .string()
+    .min(1, 'cronExpression must not be empty')
+    .refine((value) => value.trim().split(/\s+/).length === 5, {
+      message: 'cronExpression must be standard 5-field cron (minute-level granularity, no seconds field)',
+    }),
+};
+
+export const ScheduleStockCheckInputSchema = z.object(ScheduleStockCheckShape);
+export type ScheduleStockCheckInput = z.infer<typeof ScheduleStockCheckInputSchema>;
+
+export const SendNotificationShape = {
+  endpointUrl: z.string().refine(isHttpUrl, { message: 'endpointUrl must be an absolute http:// or https:// URL' }),
+  message: z.string().min(1, 'message must not be empty'),
+};
+
+export const SendNotificationInputSchema = z.object(SendNotificationShape);
+export type SendNotificationInput = z.infer<typeof SendNotificationInputSchema>;
 
 export interface ManifestEntry {
   templateId: string;

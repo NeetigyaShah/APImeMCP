@@ -26,12 +26,16 @@ export async function loadManifest(): Promise<Manifest> {
   return JSON.parse(raw) as Manifest;
 }
 
+export async function atomicWriteFile(filePath: string, data: string): Promise<void> {
+  const dir = path.dirname(filePath);
+  await fs.mkdir(dir, { recursive: true });
+  const tmpPath = path.join(dir, `.${path.basename(filePath)}.tmp-${randomUUID()}`);
+  await fs.writeFile(tmpPath, data, 'utf8');
+  await fs.rename(tmpPath, filePath);
+}
+
 export async function saveManifest(manifest: Manifest): Promise<void> {
-  const templatesDir = getTemplatesDir();
-  await fs.mkdir(templatesDir, { recursive: true });
-  const tmpPath = path.join(templatesDir, `.manifest.json.tmp-${randomUUID()}`);
-  await fs.writeFile(tmpPath, JSON.stringify(manifest, null, 2), 'utf8');
-  await fs.rename(tmpPath, getManifestPath());
+  await atomicWriteFile(getManifestPath(), JSON.stringify(manifest, null, 2));
 }
 
 export async function registerTemplate(input: RegisterExtractionTemplateInput): Promise<ManifestEntry> {

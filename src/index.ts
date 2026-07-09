@@ -3,7 +3,13 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { RegisterExtractionTemplateShape, ExecuteNativeExtractionShape, BatchDownloadShape } from './types.js';
+import {
+  RegisterExtractionTemplateShape,
+  ExecuteNativeExtractionShape,
+  BatchDownloadShape,
+  ScheduleStockCheckShape,
+  SendNotificationShape,
+} from './types.js';
 import type { ExtractionResult } from './types.js';
 import {
   ensureStorageInitialized,
@@ -14,6 +20,9 @@ import {
 } from './storage.js';
 import { initBrowser, closeBrowser, executeExtraction, isBrowserReady } from './engine.js';
 import { batchDownload } from './downloader.js';
+import { logExtractionMetric, getExtractionStats } from './metrics.js';
+import { sendNotification } from './notifier.js';
+import { Scheduler } from './scheduler.js';
 
 const RECENT_LOGS_LIMIT = 5;
 const recentLogs: string[] = [];
@@ -33,6 +42,45 @@ function logError(message: string): void {
   process.stderr.write(`[mcp-compiler-server] ERROR: ${message}\n`);
 }
 
+async function runExtraction(targetUrl: string, templateId?: string, proxyUrl?: string): Promise<ExtractionResult> {
+  const startedAt = Date.now();
+  const buildMeta = (id: string, domainMatched: string) => ({
+    url: targetUrl,
+    templateId: id,
+    domainMatched,
+    durationMs: Date.now() - startedAt,
+    timestamp: new Date().toISOString(),
+  });
+
+  try {
+    const manifest = await loadManifest();
+    const entry = templateId ? findTemplateById(manifest, templateId) : findTemplateByUrl(manifest, targetUrl);
+
+    if (!entry) {
+      return {
+        success: false,
+        error: templateId
+          ? `No registered template with templateId "${templateId}"`
+          : `No registered template matches the domain for ${targetUrl}`,
+        meta: buildMeta(templateId ?? '', ''),
+      };
+    }
+
+    const data = await executeExtraction({ targetUrl, scriptPath: entry.scriptPath, proxyUrl });
+    const imageCount = Array.isArray(data) ? data.length : data ? 1 : 0;
+    await logExtractionMetric(entry.templateId, targetUrl, imageCount);
+    return { success: true, data, meta: buildMeta(entry.templateId, entry.domainPattern) };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logError(`execute_native_extraction failed: ${message}`);
+    return { success: false, error: message, meta: buildMeta(templateId ?? '', '') };
+  }
+}
+
+const scheduler = new Scheduler(async (targetUrl, templateId) => {
+  await runExtraction(targetUrl, templateId);
+});
+
 const server = new McpServer({ name: 'mcp-compiler-server', version: '1.0.0' });
 
 server.tool('register_extraction_template', RegisterExtractionTemplateShape, async (input) => {
@@ -51,52 +99,44 @@ server.tool('register_extraction_template', RegisterExtractionTemplateShape, asy
 });
 
 server.tool('execute_native_extraction', ExecuteNativeExtractionShape, async (input) => {
-  const startedAt = Date.now();
-  const buildMeta = (templateId: string, domainMatched: string) => ({
-    url: input.targetUrl,
-    templateId,
-    domainMatched,
-    durationMs: Date.now() - startedAt,
-    timestamp: new Date().toISOString(),
-  });
+  const result = await runExtraction(input.targetUrl, input.templateId, input.proxyUrl);
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+    isError: !result.success,
+  };
+});
 
+server.tool('schedule_stock_check', ScheduleStockCheckShape, async (input) => {
   try {
-    const manifest = await loadManifest();
-    const entry = input.templateId
-      ? findTemplateById(manifest, input.templateId)
-      : findTemplateByUrl(manifest, input.targetUrl);
-
-    if (!entry) {
-      const result: ExtractionResult = {
-        success: false,
-        error: input.templateId
-          ? `No registered template with templateId "${input.templateId}"`
-          : `No registered template matches the domain for ${input.targetUrl}`,
-        meta: buildMeta(input.templateId ?? '', ''),
-      };
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], isError: true };
-    }
-
-    const data = await executeExtraction({
-      targetUrl: input.targetUrl,
-      scriptPath: entry.scriptPath,
-      proxyUrl: input.proxyUrl,
-    });
-    const result: ExtractionResult = {
-      success: true,
-      data,
-      meta: buildMeta(entry.templateId, entry.domainPattern),
-    };
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    const job = await scheduler.register(input.targetUrl, input.cronExpression, input.templateId);
+    log(`Scheduled job "${job.jobId}" (${job.cronExpression}) for ${job.targetUrl}`);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(job, null, 2) }] };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logError(`execute_native_extraction failed: ${message}`);
-    const result: ExtractionResult = {
-      success: false,
-      error: message,
-      meta: buildMeta(input.templateId ?? '', ''),
+    logError(`schedule_stock_check failed: ${message}`);
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: message }) }],
+      isError: true,
     };
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], isError: true };
+  }
+});
+
+server.tool('get_extraction_stats', {}, async () => {
+  const stats = await getExtractionStats();
+  return { content: [{ type: 'text' as const, text: JSON.stringify(stats, null, 2) }] };
+});
+
+server.tool('send_notification', SendNotificationShape, async (input) => {
+  try {
+    await sendNotification(input.endpointUrl, input.message);
+    return { content: [{ type: 'text' as const, text: JSON.stringify({ success: true }, null, 2) }] };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logError(`send_notification failed: ${message}`);
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: message }) }],
+      isError: true,
+    };
   }
 });
 
@@ -182,6 +222,7 @@ server.registerResource(
 async function main(): Promise<void> {
   await ensureStorageInitialized();
   await initBrowser();
+  await scheduler.loadPersisted();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   log('MCP compiler server running on stdio');
