@@ -73,54 +73,67 @@ real headless Chromium instance; they require `npm run build` and
 
 ### Claude Code (CLI)
 
-**Easiest — published on npm, no clone or build required:**
+Three ways to connect, in order of preference. All three register a server named
+`apimemcp`; `--scope user` makes it available in every project and session (drop
+that flag to scope it to just the current project).
+
+#### Option A — global install (recommended, confirmed working)
 
 ```bash
 npm install -g @neetigyashah/apimemcp
 claude mcp add --scope user --transport stdio apimemcp -- apimemcp
+claude mcp list
 ```
 
-`--scope user` registers it globally, available in every project and session; drop
-that flag to scope it to the current project only. The global install also runs a
-`postinstall` step that fetches the Chromium binary Playwright needs.
+The last command should show `apimemcp ... ✔ Connected`. The install step also
+fetches the Chromium binary Playwright needs (`postinstall`), and no git clone or
+TypeScript build is involved.
 
-> **Why a real global install instead of `npx -y @neetigyashah/apimemcp`?** They
-> should be equivalent, but `npx`'s on-demand bin resolution for scoped packages has
-> a known flakiness on some npm/Windows combinations — verified directly: the
-> package's shim scripts are correct and run fine when invoked by path, but `npx`
-> itself fails to add its own cache directory to the child process's `PATH` before
-> executing (reproducible even against other unrelated npx-based MCP servers on an
-> affected machine, not specific to this package). A real `npm install -g` uses the
-> standard global-bin mechanism instead, which doesn't have this failure mode. Feel
-> free to try the `npx` one-liner first — if `claude mcp list` shows it connected,
-> great — but fall back to the global install above if it shows "Failed to connect."
+**Updating**: `npm update -g @neetigyashah/apimemcp`, then restart your Claude Code
+session.
 
-Verify it's connected:
+#### Option B — `npx`, no persistent install
 
 ```bash
-claude mcp list          # shows all registered servers and their connection status
-claude mcp get apimemcp  # shows scope, command, and args for this one
+claude mcp add --scope user --transport stdio apimemcp -- npx -y @neetigyashah/apimemcp
+claude mcp list
 ```
 
-Once connected, every tool below is directly callable by name — no separate API
-layer to learn, the tool list below *is* the API.
+Worth trying if you'd rather not install anything globally. **If `claude mcp list`
+shows it connected, you're done** — nothing further to read here.
 
-**Keeping it up to date**: `npm update -g @neetigyashah/apimemcp` pulls the latest
-published version. The server itself will tell you when it's behind —
-`checkForUpdates()` compares against the latest commit on GitHub at startup and
-logs `UPDATE AVAILABLE: ...`; the `status://server` MCP resource also exposes this
-as `updateAvailable: true/false` so an agent can check it programmatically.
-
-**From source instead** (if you want to modify the code): clone the repo, then
-`npm install && npm run build`, and register with a direct path instead of `npx`:
+If instead it shows `✘ Failed to connect`: this is a known, confirmed-reproducible
+`npx` bug on some npm/Windows combinations, unrelated to this package specifically
+(the package's own shim scripts run correctly when invoked directly — `npx` itself
+fails to put its cache directory on the child process's `PATH` before executing).
+Remove the failed registration and use Option A instead:
 
 ```bash
-claude mcp add --scope user --transport stdio apimemcp -- node /absolute/path/to/mcp-compiler-server/dist/index.js
+claude mcp remove apimemcp -s user
 ```
 
-After pulling new source, `git pull && npm install && npm run build` before it
-takes effect — the server runs from the compiled `dist/`, not the TypeScript
-source directly.
+**Updating**: nothing to do — `npx` re-resolves against the registry each launch.
+
+#### Option C — from source (for modifying the code)
+
+```bash
+git clone https://github.com/NeetigyaShah/APImeMCP.git
+cd APImeMCP
+npm install && npm run build
+claude mcp add --scope user --transport stdio apimemcp -- node /absolute/path/to/APImeMCP/dist/index.js
+```
+
+**Updating**: `git pull && npm install && npm run build` in that directory, then
+restart your Claude Code session — it runs from the compiled `dist/`, not the
+TypeScript source directly, so pulling alone isn't enough.
+
+#### All options: staying current
+
+Whichever option you used, the server tells you when a newer version exists on its
+own: `checkForUpdates()` compares against the latest commit on GitHub at startup
+and logs `UPDATE AVAILABLE: ...`, and the `status://server` MCP resource exposes
+`updateAvailable: true/false` so an agent can check programmatically instead of you
+watching stderr.
 
 ### Claude Desktop
 
