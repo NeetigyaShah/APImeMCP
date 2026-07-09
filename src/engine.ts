@@ -1,8 +1,9 @@
-import type { Browser } from 'playwright';
+import type { Browser, Page } from 'playwright';
 import { chromium } from 'playwright-extra';
 import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 // Inject stealth plugin globally into the chromium instance
 chromium.use(stealthPlugin());
@@ -59,6 +60,22 @@ function assertJsonSerializable(value: unknown): unknown {
   }
 }
 
+interface ForensicPaths {
+  screenshotPath: string;
+  domPath: string;
+}
+
+async function captureForensics(page: Page): Promise<ForensicPaths> {
+  const logsDir = path.join('output', 'logs');
+  await fs.mkdir(logsDir, { recursive: true });
+  const prefix = `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`;
+  const screenshotPath = path.join(logsDir, `${prefix}-screenshot.png`);
+  const domPath = path.join(logsDir, `${prefix}-dom.html`);
+  await page.screenshot({ path: screenshotPath, fullPage: true });
+  await fs.writeFile(domPath, await page.content());
+  return { screenshotPath, domPath };
+}
+
 export interface ExecuteExtractionOptions {
   targetUrl: string;
   scriptPath: string;
@@ -80,10 +97,24 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     });
     const page = await context.newPage();
-    await page.goto(options.targetUrl, { timeout: NAVIGATION_TIMEOUT_MS, waitUntil: 'networkidle' });
-    const script = await fs.readFile(path.resolve(process.cwd(), options.scriptPath), 'utf8');
-    const rawResult = await page.evaluate(script);
-    return assertJsonSerializable(rawResult);
+    try {
+      await page.goto(options.targetUrl, { timeout: NAVIGATION_TIMEOUT_MS, waitUntil: 'networkidle' });
+      const script = await fs.readFile(path.resolve(process.cwd(), options.scriptPath), 'utf8');
+      const rawResult = await page.evaluate(script);
+      return assertJsonSerializable(rawResult);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      try {
+        const { screenshotPath, domPath } = await captureForensics(page);
+        throw new Error(`Extraction failed: ${message} (forensic artifacts: ${screenshotPath}, ${domPath})`);
+      } catch (captureErr) {
+        if (captureErr instanceof Error && captureErr.message.startsWith('Extraction failed:')) {
+          throw captureErr;
+        }
+        // Forensic capture itself failed (e.g. page already closed) - don't mask the real error.
+        throw err;
+      }
+    }
   } finally {
     await context.close();
   }
