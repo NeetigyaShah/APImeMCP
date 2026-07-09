@@ -41,6 +41,14 @@ export const ExecuteNativeExtractionShape = {
 export const ExecuteNativeExtractionInputSchema = z.object(ExecuteNativeExtractionShape);
 export type ExecuteNativeExtractionInput = z.infer<typeof ExecuteNativeExtractionInputSchema>;
 
+export const BatchDownloadShape = {
+  urls: z.array(z.string().refine(isHttpUrl, { message: 'each url must be an absolute http:// or https:// URL' })),
+  outputDir: z.string().min(1, 'outputDir must not be empty'),
+};
+
+export const BatchDownloadInputSchema = z.object(BatchDownloadShape);
+export type BatchDownloadInput = z.infer<typeof BatchDownloadInputSchema>;
+
 export interface ManifestEntry {
   templateId: string;
   domainPattern: string;

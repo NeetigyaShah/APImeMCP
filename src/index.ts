@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { RegisterExtractionTemplateShape, ExecuteNativeExtractionShape } from './types.js';
+import { RegisterExtractionTemplateShape, ExecuteNativeExtractionShape, BatchDownloadShape } from './types.js';
 import type { ExtractionResult } from './types.js';
 import {
   ensureStorageInitialized,
@@ -11,6 +11,7 @@ import {
   findTemplateByUrl,
 } from './storage.js';
 import { initBrowser, closeBrowser, executeExtraction } from './engine.js';
+import { batchDownload } from './downloader.js';
 
 function log(message: string): void {
   process.stderr.write(`[mcp-compiler-server] ${message}\n`);
@@ -84,6 +85,41 @@ server.tool('execute_native_extraction', ExecuteNativeExtractionShape, async (in
       meta: buildMeta(input.templateId ?? '', ''),
     };
     return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], isError: true };
+  }
+});
+
+server.tool('batch_download_assets', BatchDownloadShape, async (input) => {
+  try {
+    const results = await batchDownload(input.urls, input.outputDir);
+    const succeeded = results.filter((r) => r.success).length;
+    const failed = results.length - succeeded;
+    log(`batch_download_assets: saved ${succeeded}/${results.length} files to "${input.outputDir}"`);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(
+            {
+              success: failed === 0,
+              savedCount: succeeded,
+              failedCount: failed,
+              outputDir: input.outputDir,
+              results,
+            },
+            null,
+            2
+          ),
+        },
+      ],
+      isError: failed > 0 && succeeded === 0,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logError(`batch_download_assets failed: ${message}`);
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: message }) }],
+      isError: true,
+    };
   }
 });
 
