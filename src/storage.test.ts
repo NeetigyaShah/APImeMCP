@@ -80,12 +80,14 @@ describe('registerTemplate', () => {
     expect(scriptContent).toBe('v2');
   });
 
-  it('removes a previous template that owned the same domainPattern', async () => {
+  it('keeps both entries when they share a domainPattern (N:1 domain-to-template support)', async () => {
     await registerTemplate({ templateId: 'old', domainPattern: 'shared.com', executableScript: 'old' });
     await registerTemplate({ templateId: 'new', domainPattern: 'shared.com', executableScript: 'new' });
     const manifest = await loadManifest();
-    expect(manifest.old).toBeUndefined();
+    expect(manifest.old).toBeDefined();
     expect(manifest.new).toBeDefined();
+    expect(manifest.old.domainPattern).toBe('shared.com');
+    expect(manifest.new.domainPattern).toBe('shared.com');
   });
 });
 
@@ -123,5 +125,25 @@ describe('findTemplateByUrl', () => {
 
   it('returns undefined when nothing matches', () => {
     expect(findTemplateByUrl(manifest, 'https://unrelated.org')).toBeUndefined();
+  });
+
+  it('breaks a tie between identical domainPatterns by most-recently-updated', () => {
+    const collidingManifest: Manifest = {
+      first: {
+        templateId: 'first',
+        domainPattern: 'bernhardt.com',
+        scriptPath: 'templates/first.js',
+        createdAt: 'x',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      second: {
+        templateId: 'second',
+        domainPattern: 'bernhardt.com',
+        scriptPath: 'templates/second.js',
+        createdAt: 'x',
+        updatedAt: '2026-02-01T00:00:00.000Z',
+      },
+    };
+    expect(findTemplateByUrl(collidingManifest, 'https://bernhardt.com/shop')?.templateId).toBe('second');
   });
 });

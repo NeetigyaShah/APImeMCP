@@ -47,12 +47,6 @@ export async function registerTemplate(input: RegisterExtractionTemplateInput): 
   const manifest = await loadManifest();
   const now = new Date().toISOString();
 
-  for (const [id, entry] of Object.entries(manifest)) {
-    if (id !== input.templateId && entry.domainPattern === input.domainPattern) {
-      delete manifest[id];
-    }
-  }
-
   const templatesDir = getTemplatesDir();
   const scriptFileName = `${input.templateId}.js`;
   await fs.writeFile(path.join(templatesDir, scriptFileName), input.executableScript, 'utf8');
@@ -80,7 +74,12 @@ export function findTemplateByUrl(manifest: Manifest, targetUrl: string): Manife
   for (const entry of Object.values(manifest)) {
     const pattern = entry.domainPattern;
     const matches = hostname === pattern || hostname.endsWith(`.${pattern}`);
-    if (matches && (!best || pattern.length > best.domainPattern.length)) {
+    if (!matches) continue;
+    if (
+      !best ||
+      pattern.length > best.domainPattern.length ||
+      (pattern.length === best.domainPattern.length && entry.updatedAt > best.updatedAt)
+    ) {
       best = entry;
     }
   }
