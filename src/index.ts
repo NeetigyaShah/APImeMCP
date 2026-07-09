@@ -9,8 +9,9 @@ import {
   BatchDownloadShape,
   ScheduleStockCheckShape,
   SendNotificationShape,
+  isHttpUrl,
 } from './types.js';
-import type { ExtractionResult } from './types.js';
+import type { ExtractionResult, Manifest } from './types.js';
 import {
   ensureStorageInitialized,
   loadManifest,
@@ -24,6 +25,7 @@ import { logExtractionMetric, getExtractionStats } from './metrics.js';
 import { sendNotification } from './notifier.js';
 import { Scheduler } from './scheduler.js';
 import { reportProgress } from './progress.js';
+import express from 'express';
 
 const RECENT_LOGS_LIMIT = 5;
 const recentLogs: string[] = [];
@@ -245,10 +247,110 @@ server.registerResource(
   })
 );
 
+const DASHBOARD_PORT = 3000;
+
+function renderDashboard(manifest: Manifest): string {
+  const cards = Object.values(manifest)
+    .map(
+      (entry) => `
+        <div class="card">
+          <h2>${entry.templateId}</h2>
+          <p class="domain">${entry.domainPattern}</p>
+          <p class="updated">Updated: ${entry.updatedAt}</p>
+          <input type="text" placeholder="https://example.com/page" class="url-input" />
+          <button onclick="runTemplate('${entry.templateId}', this)">Run Now</button>
+          <pre class="result"></pre>
+        </div>`
+    )
+    .join('\n');
+
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>mcp-compiler-server dashboard</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; padding: 2rem; }
+  h1 { color: #38bdf8; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+  .card { background: #1e293b; border-radius: 8px; padding: 1rem; }
+  .card h2 { margin: 0 0 0.25rem; font-size: 1.1rem; color: #f1f5f9; }
+  .domain { color: #94a3b8; margin: 0 0 0.25rem; }
+  .updated { color: #64748b; font-size: 0.8rem; margin: 0 0 0.75rem; }
+  .url-input { width: 100%; box-sizing: border-box; padding: 0.4rem; margin-bottom: 0.5rem; border-radius: 4px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; }
+  button { background: #38bdf8; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-weight: 600; }
+  button:hover { background: #0ea5e9; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .result { background: #0f172a; padding: 0.5rem; border-radius: 4px; max-height: 200px; overflow: auto; font-size: 0.75rem; white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>
+<h1>mcp-compiler-server</h1>
+<div class="grid">
+${cards}
+</div>
+<script>
+async function runTemplate(templateId, btn) {
+  const card = btn.closest('.card');
+  const input = card.querySelector('.url-input');
+  const result = card.querySelector('.result');
+  const url = input.value.trim();
+  if (!url) { result.textContent = 'Enter a URL first'; return; }
+  btn.disabled = true;
+  result.textContent = 'Running...';
+  try {
+    const res = await fetch('/api/run/' + encodeURIComponent(templateId) + '?url=' + encodeURIComponent(url));
+    const data = await res.json();
+    result.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    result.textContent = 'Request failed: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>`;
+}
+
+function startDashboard(): void {
+  const app = express();
+
+  app.get('/', async (_req, res) => {
+    const manifest = await loadManifest();
+    res.type('html').send(renderDashboard(manifest));
+  });
+
+  app.get('/api/run/:templateId', async (req, res) => {
+    const { templateId } = req.params;
+    const targetUrl = typeof req.query.url === 'string' ? req.query.url : '';
+
+    if (!RegisterExtractionTemplateShape.templateId.safeParse(templateId).success) {
+      res.status(400).json({ success: false, error: 'invalid templateId' });
+      return;
+    }
+    if (!isHttpUrl(targetUrl)) {
+      res.status(400).json({ success: false, error: 'url query param must be an absolute http:// or https:// URL' });
+      return;
+    }
+
+    const result = await runExtraction(targetUrl, templateId);
+    res.json(result);
+  });
+
+  const httpServer = app.listen(DASHBOARD_PORT, '127.0.0.1', () => {
+    log(`Dashboard listening on http://127.0.0.1:${DASHBOARD_PORT}`);
+  });
+  httpServer.on('error', (err) => {
+    logError(`Dashboard failed to start: ${err instanceof Error ? err.message : String(err)}`);
+  });
+}
+
 async function main(): Promise<void> {
   await ensureStorageInitialized();
   await initBrowser();
   await scheduler.loadPersisted();
+  startDashboard();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   log('MCP compiler server running on stdio');
