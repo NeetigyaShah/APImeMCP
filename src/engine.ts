@@ -1,7 +1,11 @@
-import { chromium } from 'playwright';
 import type { Browser } from 'playwright';
+import { chromium } from 'playwright-extra';
+import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+// Inject stealth plugin globally into the chromium instance
+chromium.use(stealthPlugin());
 
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
