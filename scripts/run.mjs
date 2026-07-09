@@ -16,10 +16,13 @@ const client = new Client({ name: 'run-cli', version: '1.0.0' });
 
 try {
   await client.connect(transport);
-  const result = await client.callTool({
-    name: 'execute_native_extraction',
-    arguments: { targetUrl, templateId },
-  });
+  const result = await client.callTool(
+    { name: 'execute_native_extraction', arguments: { targetUrl, templateId } },
+    undefined,
+    // ponytail: paginated live extractions can run many minutes; default 60s client
+    // request timeout is too short. Bump per-call rather than adding config plumbing.
+    { timeout: 30 * 60 * 1000 }
+  );
   const payload = JSON.parse(result.content[0].text);
   console.log(JSON.stringify(payload, null, 2));
   process.exitCode = payload.success ? 0 : 1;
