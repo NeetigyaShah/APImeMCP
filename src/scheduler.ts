@@ -64,4 +64,8 @@ export class Scheduler {
   private async persist(): Promise<void> {
     await atomicWriteFile(getJobsPath(), JSON.stringify(Array.from(this.jobs.values()), null, 2));
   }
+
+  list(): ScheduledJob[] {
+    return Array.from(this.jobs.values());
+  }
 }

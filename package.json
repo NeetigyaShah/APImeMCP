@@ -1,16 +1,31 @@
 {
-  "name": "mcp-compiler-server",
+  "name": "@neetigyashah/apimemcp",
   "version": "1.0.0",
   "description": "MCP server implementing a compiler pattern for deterministic web scraping and data extraction",
   "type": "module",
-  "private": true,
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "apimemcp": "dist/index.js"
+  },
+  "files": [
+    "dist/**/*.js"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NeetigyaShah/APImeMCP.git"
+  },
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run build",
+    "postinstall": "playwright install chromium || true"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

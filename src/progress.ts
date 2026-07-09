@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import { atomicWriteFile } from './storage.js';
 
 export interface ProgressState {
@@ -31,5 +32,13 @@ export async function reportDashboardStatus(port: number): Promise<void> {
     await atomicWriteFile(getDashboardStatusPath(), JSON.stringify({ port, url: `http://127.0.0.1:${port}` }, null, 2));
   } catch {
     // ponytail: best-effort UI telemetry, same reasoning as reportProgress above
+  }
+}
+
+export async function getProgress(): Promise<(ProgressState & { updatedAt: string }) | null> {
+  try {
+    return JSON.parse(await fs.readFile(getProgressPath(), 'utf8'));
+  } catch {
+    return null;
   }
 }
