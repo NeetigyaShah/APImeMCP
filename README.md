@@ -73,47 +73,46 @@ real headless Chromium instance; they require `npm run build` and
 
 ### Claude Code (CLI)
 
-Build first (`npm install && npm run build`, see above), then register it. There
-are two scopes — pick based on whether you want this available everywhere or just
-in one project:
-
-**Global (recommended)** — available in every project, every session:
+**Easiest — published on npm, no clone or build required:**
 
 ```bash
-claude mcp add --scope user --transport stdio mcp-compiler-server -- node /absolute/path/to/mcp-compiler-server/dist/index.js
+claude mcp add --scope user --transport stdio apimemcp -- npx -y @neetigyashah/apimemcp
 ```
 
-**Project-only** — available only when working in this specific project directory:
-
-```bash
-claude mcp add mcp-compiler-server -- node /absolute/path/to/mcp-compiler-server/dist/index.js
-```
+`npx` fetches, caches, and runs the package on demand — the first run downloads it
+(and its Chromium binary, via a `postinstall` step) automatically. `--scope user`
+registers it globally, available in every project and session; drop that flag (and
+just run `claude mcp add apimemcp -- npx -y @neetigyashah/apimemcp`) to scope it to
+the current project only.
 
 Verify it's connected:
 
 ```bash
 claude mcp list          # shows all registered servers and their connection status
-claude mcp get mcp-compiler-server   # shows scope, command, and args for this one
+claude mcp get apimemcp  # shows scope, command, and args for this one
 ```
 
 Once connected, every tool below is directly callable by name — no separate API
 layer to learn, the tool list below *is* the API.
 
-**Keeping it up to date**: since the server runs from a compiled `dist/`
-directory, pulling new source doesn't take effect until you rebuild. In the
-installed clone's directory:
+**Keeping it up to date**: `npx` re-resolves the package on each launch against its
+local cache, so a new release may need `npx clear-npx-cache` (or `npx -y
+@neetigyashah/apimemcp@latest` once) to pick up immediately rather than waiting for
+npx's normal cache expiry. The server itself will tell you when it's behind —
+`checkForUpdates()` compares against the latest commit on GitHub at startup and
+logs `UPDATE AVAILABLE: ...`; the `status://server` MCP resource also exposes this
+as `updateAvailable: true/false` so an agent can check it programmatically.
+
+**From source instead** (if you want to modify the code): clone the repo, then
+`npm install && npm run build`, and register with a direct path instead of `npx`:
 
 ```bash
-git pull
-npm install    # picks up any new dependencies
-npm run build
+claude mcp add --scope user --transport stdio apimemcp -- node /absolute/path/to/mcp-compiler-server/dist/index.js
 ```
 
-The server itself will tell you when this is needed — `checkForUpdates()` compares
-your local `git rev-parse HEAD` against the latest commit on GitHub at startup and
-logs `UPDATE AVAILABLE: ...` if you're behind; the `status://server` MCP resource
-also exposes this as `updateAvailable: true/false` so an agent can check
-programmatically instead of you watching stderr.
+After pulling new source, `git pull && npm install && npm run build` before it
+takes effect — the server runs from the compiled `dist/`, not the TypeScript
+source directly.
 
 ### Claude Desktop
 
