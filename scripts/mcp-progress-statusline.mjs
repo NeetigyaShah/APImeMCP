@@ -28,7 +28,7 @@ function readJson(filePath) {
 function dashboardLine(projectDir) {
   const dashboard = readJson(path.join(projectDir, '.mcp-dashboard.json'));
   if (!dashboard?.port) return '';
-  return `[34m◈[0m mcp-compiler-server — dashboard live on :${dashboard.port}`;
+  return `[34m◈[0m APImeMCP — dashboard live on :${dashboard.port}`;
 }
 
 let input = '';
@@ -58,7 +58,7 @@ process.stdin.on('end', () => {
   const label = state.status === 'running' ? `${percent}% (${state.current}/${state.total})` : state.status;
   const icon = ICONS[state.status] ?? '';
   const message = truncate(state.message, 40);
-  process.stdout.write(`${icon} mcp-compiler-server — ${state.tool}: ${label}${message ? ' — ' + message : ''}`);
+  process.stdout.write(`${icon} APImeMCP — ${state.tool}: ${label}${message ? ' — ' + message : ''}`);
 });
 
 // If nothing is piped (interactive test run), stdin never ends on its own.

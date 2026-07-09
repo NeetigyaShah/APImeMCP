@@ -26,7 +26,7 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
 
   try {
     const response = await fetch(REPO_COMMITS_URL, {
-      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'mcp-compiler-server' },
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'APImeMCP' },
     });
     if (!response.ok) {
       return { updateAvailable: false, latestCommit: null };

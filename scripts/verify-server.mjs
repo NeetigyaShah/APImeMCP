@@ -10,7 +10,7 @@ const HTML = '<!doctype html><html><head><title>Server Smoke Test</title></head>
 const EXTRACTION_SCRIPT = "(() => ({ title: document.title, value: document.getElementById('target').textContent }))()";
 
 async function main() {
-  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'mcp-compiler-server-smoke-'));
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'apimemcp-smoke-'));
 
   const httpServer = http.createServer((_req, res) => {
     res.setHeader('Content-Type', 'text/html');

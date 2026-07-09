@@ -40,54 +40,79 @@ function record(line: string): void {
 
 function log(message: string): void {
   record(message);
-  process.stderr.write(`[mcp-compiler-server] ${message}\n`);
+  process.stderr.write(`[APImeMCP] ${message}\n`);
 }
 
 function logError(message: string): void {
   record(`ERROR: ${message}`);
-  process.stderr.write(`[mcp-compiler-server] ERROR: ${message}\n`);
+  process.stderr.write(`[APImeMCP] ERROR: ${message}\n`);
 }
 
 async function runExtraction(
-  targetUrl: string,
+  targetUrl?: string,
   templateId?: string,
   proxyUrl?: string,
   cookieString?: string,
   simulateLowBandwidth?: boolean
 ): Promise<ExtractionResult> {
   const startedAt = Date.now();
-  const buildMeta = (id: string, domainMatched: string) => ({
-    url: targetUrl,
+  const buildMeta = (id: string, domainMatched: string, resolvedUrl: string) => ({
+    url: resolvedUrl,
     templateId: id,
     domainMatched,
     durationMs: Date.now() - startedAt,
     timestamp: new Date().toISOString(),
   });
 
-  await reportProgress({ tool: 'execute_native_extraction', status: 'running', current: 0, total: 1, message: targetUrl });
+  await reportProgress({
+    tool: 'execute_native_extraction',
+    status: 'running',
+    current: 0,
+    total: 1,
+    message: targetUrl ?? templateId ?? '',
+  });
 
   try {
     const manifest = await loadManifest();
-    const entry = templateId ? findTemplateById(manifest, templateId) : findTemplateByUrl(manifest, targetUrl);
+    const entry = templateId
+      ? findTemplateById(manifest, templateId)
+      : targetUrl
+        ? findTemplateByUrl(manifest, targetUrl)
+        : undefined;
 
     if (!entry) {
       const error = templateId
         ? `No registered template with templateId "${templateId}"`
-        : `No registered template matches the domain for ${targetUrl}`;
+        : targetUrl
+          ? `No registered template matches the domain for ${targetUrl}`
+          : 'targetUrl or templateId is required';
       await reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message: error });
-      return { success: false, error, meta: buildMeta(templateId ?? '', '') };
+      return { success: false, error, meta: buildMeta(templateId ?? '', '', targetUrl ?? '') };
     }
 
-    const data = await executeExtraction({ targetUrl, scriptPath: entry.scriptPath, proxyUrl, cookieString, simulateLowBandwidth });
+    const resolvedUrl = targetUrl ?? entry.fixedTargetUrl;
+    if (!resolvedUrl) {
+      const error = `Template "${entry.templateId}" has no fixedTargetUrl registered; targetUrl is required`;
+      await reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message: error });
+      return { success: false, error, meta: buildMeta(entry.templateId, entry.domainPattern, '') };
+    }
+
+    const data = await executeExtraction({
+      targetUrl: resolvedUrl,
+      scriptPath: entry.scriptPath,
+      proxyUrl,
+      cookieString,
+      simulateLowBandwidth,
+    });
     const imageCount = Array.isArray(data) ? data.length : data ? 1 : 0;
-    await logExtractionMetric(entry.templateId, targetUrl, imageCount);
-    await reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: targetUrl });
-    return { success: true, data, meta: buildMeta(entry.templateId, entry.domainPattern) };
+    await logExtractionMetric(entry.templateId, resolvedUrl, imageCount);
+    await reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
+    return { success: true, data, meta: buildMeta(entry.templateId, entry.domainPattern, resolvedUrl) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logError(`execute_native_extraction failed: ${message}`);
     await reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message });
-    return { success: false, error: message, meta: buildMeta(templateId ?? '', '') };
+    return { success: false, error: message, meta: buildMeta(templateId ?? '', '', targetUrl ?? '') };
   }
 }
 
@@ -95,7 +120,7 @@ const scheduler = new Scheduler(async (targetUrl, templateId) => {
   await runExtraction(targetUrl, templateId);
 });
 
-const server = new McpServer({ name: 'mcp-compiler-server', version: '1.0.0' });
+const server = new McpServer({ name: 'APImeMCP', version: '1.0.3' });
 
 server.tool('register_extraction_template', RegisterExtractionTemplateShape, async (input) => {
   await reportProgress({

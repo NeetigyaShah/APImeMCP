@@ -27,13 +27,18 @@ export const RegisterExtractionTemplateShape = {
     .string()
     .min(1, 'executableScript must not be empty')
     .max(100_000, 'executableScript exceeds the 100KB limit'),
+  // Set when the template always targets the same page (e.g. "today's deals").
+  // Callers can then omit targetUrl entirely at execution time.
+  fixedTargetUrl: z.string().refine(isHttpUrl, { message: 'fixedTargetUrl must be an absolute http:// or https:// URL' }).optional(),
 };
 
 export const RegisterExtractionTemplateInputSchema = z.object(RegisterExtractionTemplateShape);
 export type RegisterExtractionTemplateInput = z.infer<typeof RegisterExtractionTemplateInputSchema>;
 
 export const ExecuteNativeExtractionShape = {
-  targetUrl: z.string().refine(isHttpUrl, { message: 'targetUrl must be an absolute http:// or https:// URL' }),
+  // Optional: omit it entirely for a fixed-target template (registered with
+  // fixedTargetUrl) - the registered URL is used automatically.
+  targetUrl: z.string().refine(isHttpUrl, { message: 'targetUrl must be an absolute http:// or https:// URL' }).optional(),
   templateId: TemplateIdSchema.optional(),
   proxyUrl: z.string().url().optional(),
 };
@@ -50,7 +55,10 @@ export const BatchDownloadInputSchema = z.object(BatchDownloadShape);
 export type BatchDownloadInput = z.infer<typeof BatchDownloadInputSchema>;
 
 export const ScheduleStockCheckShape = {
-  targetUrl: ExecuteNativeExtractionShape.targetUrl,
+  // Required (unlike execute_native_extraction's targetUrl): scheduling a fixed-target
+  // template on a cron is unaffected by this feature - use execute_native_extraction
+  // directly to run those without a URL.
+  targetUrl: z.string().refine(isHttpUrl, { message: 'targetUrl must be an absolute http:// or https:// URL' }),
   templateId: ExecuteNativeExtractionShape.templateId,
   cronExpression: z
     .string()
@@ -75,6 +83,7 @@ export interface ManifestEntry {
   templateId: string;
   domainPattern: string;
   scriptPath: string;
+  fixedTargetUrl?: string;
   createdAt: string;
   updatedAt: string;
 }

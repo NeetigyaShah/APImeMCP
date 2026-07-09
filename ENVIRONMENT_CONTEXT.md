@@ -1,6 +1,6 @@
 # Environment Context
 
-Technical architecture notes for `mcp-compiler-server`, exposed via the MCP Prompts
+Technical architecture notes for `APImeMCP`, exposed via the MCP Prompts
 API (`get_environment_context`) for any client that wants a quick orientation.
 
 ## What this server is

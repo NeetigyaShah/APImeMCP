@@ -1,9 +1,9 @@
 ---
 name: using-apimemcp
-description: Use when asked to build a data-extraction API, scraper, downloader, or scheduled monitor for a specific website, or when apimemcp/mcp-compiler-server MCP tools (register_extraction_template, execute_native_extraction, batch_download_assets, schedule_stock_check) are available for the task.
+description: Use when asked to build a data-extraction API, scraper, downloader, or scheduled monitor for a specific website, or when APImeMCP MCP tools (register_extraction_template, execute_native_extraction, batch_download_assets, schedule_stock_check) are available for the task.
 ---
 
-# Using apimemcp (mcp-compiler-server)
+# Using APImeMCP
 
 ## Overview
 
@@ -51,8 +51,8 @@ apply the same judgment here you'd apply to writing that code by hand.
 
 | Tool | Input | Notes |
 |---|---|---|
-| `register_extraction_template` | `templateId` (kebab-case), `domainPattern`, `executableScript` | Upserts by `templateId`. Multiple templates can share a `domainPattern` (N:1) — always pass explicit `templateId` when more than one template targets the same domain, auto-match-by-URL is only reliable for a domain's single most-recently-registered template. |
-| `execute_native_extraction` | `targetUrl`, `templateId?`, `proxyUrl?` | Omit `templateId` only when the domain has exactly one template. Logs a metric automatically on success. |
+| `register_extraction_template` | `templateId` (kebab-case), `domainPattern`, `executableScript`, `fixedTargetUrl?` | Upserts by `templateId`. Multiple templates can share a `domainPattern` (N:1) — always pass explicit `templateId` when more than one template targets the same domain, auto-match-by-URL is only reliable for a domain's single most-recently-registered template. Set `fixedTargetUrl` when the page never varies (see below). |
+| `execute_native_extraction` | `targetUrl?`, `templateId?`, `proxyUrl?` | `targetUrl` is only optional when `templateId` names a template registered with `fixedTargetUrl`. Logs a metric automatically on success. |
 | `batch_download_assets` | `urls: string[]`, `outputDir` | Concurrency-limited (5 at a time). Use this for "download the images" rather than writing your own fetch loop. |
 | `schedule_stock_check` | `targetUrl`, `cronExpression` (5-field only), `templateId?` | Persists across restarts. |
 | `get_extraction_stats` | none | Totals, recent domains, last run — read this instead of re-deriving from raw files. |
@@ -61,6 +61,16 @@ apply the same judgment here you'd apply to writing that code by hand.
 Resource `status://server` and dashboard `http://127.0.0.1:3000` (if running) expose
 the same data for inspection — check `status://server` before assuming the browser
 isn't ready.
+
+## Templates with no per-run input ("fixed-target")
+
+Some requests don't have a URL that varies per call — "get me today's top deals on
+Amazon" always hits the same deals page; there's nothing for a caller to supply.
+Register those with `fixedTargetUrl` set to that one page, and call
+`execute_native_extraction` with just `templateId` — no `targetUrl`. The dashboard
+marks these with a ★ badge instead of a URL input, so they're visually distinct
+from templates that need a per-call target. Don't ask the caller for a URL a
+fixed-target template doesn't need.
 
 ## Defaults — don't ask, just pick these unless told otherwise
 

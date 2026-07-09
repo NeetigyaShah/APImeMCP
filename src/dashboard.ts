@@ -65,14 +65,19 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
   const templateRows = templates
     .map(
       (entry) => `
-      <div class="row" data-template-id="${entry.templateId}">
+      <div class="row" data-template-id="${entry.templateId}" ${entry.fixedTargetUrl ? 'data-fixed-target="1"' : ''}>
         <div class="row-main">
           <span class="mono id">${entry.templateId}</span>
+          ${entry.fixedTargetUrl ? `<span class="mono fixed-badge" title="${entry.fixedTargetUrl}">&#9733; no input needed</span>` : ''}
           <span class="mono domain">${entry.domainPattern}</span>
           <span class="mono ts dim">${entry.updatedAt}</span>
         </div>
         <div class="row-controls">
-          <input type="text" class="url-input mono" placeholder="https://example.com/page" />
+          ${
+            entry.fixedTargetUrl
+              ? `<span class="mono fixed-url dim">${entry.fixedTargetUrl}</span>`
+              : '<input type="text" class="url-input mono" placeholder="https://example.com/page" />'
+          }
           <button class="btn run-btn" onclick="runTemplate('${entry.templateId}', this)">Run</button>
         </div>
         <div class="row-qa">
@@ -90,7 +95,7 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>mcp-compiler-server</title>
+<title>APImeMCP</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -160,6 +165,8 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
   .row-main { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
   .id { color: var(--phosphor); font-weight: 600; }
   .domain { color: var(--text); }
+  .fixed-badge { color: var(--ok); font-size: 0.75rem; }
+  .fixed-url { flex: 1; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ts { font-size: 0.75rem; margin-left: auto; }
   .row-controls { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
   .url-input {
@@ -237,7 +244,7 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
   <span class="dot on" title="MCP connection"></span>
   <span class="dot ${browserReady ? 'on' : 'off'}" title="Browser"></span>
   <span class="dot on" title="Dashboard"></span>
-  <span class="chrome-title"><b>mcp-compiler-server</b> — compiler pattern extraction control</span>
+  <span class="chrome-title"><b>APImeMCP</b> — compiler pattern extraction control</span>
 </div>
 
 <main>
@@ -292,12 +299,14 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
 <script>
 async function runTemplate(templateId, btn) {
   const row = btn.closest('.row');
-  const url = row.querySelector('.url-input').value.trim();
+  const isFixedTarget = row.dataset.fixedTarget === '1';
+  const urlInput = row.querySelector('.url-input');
+  const url = isFixedTarget ? '' : urlInput.value.trim();
   const proxyUrl = row.querySelector('.proxy-input').value.trim();
   const cookieString = row.querySelector('.cookie-input').value.trim();
   const simulateLowBandwidth = row.querySelector('.bandwidth-cb').checked;
   const result = row.querySelector('.result');
-  if (!url) { result.textContent = 'Enter a URL first'; return; }
+  if (!isFixedTarget && !url) { result.textContent = 'Enter a URL first'; return; }
   btn.disabled = true;
   result.textContent = 'Running...';
   try {
@@ -423,14 +432,18 @@ async function loadLogs() {
 let knownTemplateIds = ${JSON.stringify(templates.map((t) => t.templateId).sort())};
 
 function templateRowHtml(entry) {
-  return '<div class="row" data-template-id="' + entry.templateId + '">' +
+  const fixed = !!entry.fixedTargetUrl;
+  return '<div class="row" data-template-id="' + entry.templateId + '"' + (fixed ? ' data-fixed-target="1"' : '') + '>' +
     '<div class="row-main">' +
       '<span class="mono id">' + entry.templateId + '</span>' +
+      (fixed ? '<span class="mono fixed-badge" title="' + entry.fixedTargetUrl + '">&#9733; no input needed</span>' : '') +
       '<span class="mono domain">' + entry.domainPattern + '</span>' +
       '<span class="mono ts dim">' + entry.updatedAt + '</span>' +
     '</div>' +
     '<div class="row-controls">' +
-      '<input type="text" class="url-input mono" placeholder="https://example.com/page" />' +
+      (fixed
+        ? '<span class="mono fixed-url dim">' + entry.fixedTargetUrl + '</span>'
+        : '<input type="text" class="url-input mono" placeholder="https://example.com/page" />') +
       '<button class="btn run-btn" onclick="runTemplate(\\'' + entry.templateId + '\\', this)">Run</button>' +
     '</div>' +
     '<div class="row-qa">' +
@@ -482,7 +495,7 @@ export function startDashboard(deps: DashboardDeps): void {
   app.post('/api/run/:templateId', async (req, res) => {
     const { templateId } = req.params;
     const body = req.body ?? {};
-    const targetUrl = typeof body.url === 'string' ? body.url : '';
+    const targetUrl = typeof body.url === 'string' && body.url ? body.url : undefined;
     const proxyUrl = typeof body.proxyUrl === 'string' && body.proxyUrl ? body.proxyUrl : undefined;
     const cookieString = typeof body.cookieString === 'string' && body.cookieString ? body.cookieString : undefined;
     const simulateLowBandwidth = body.simulateLowBandwidth === true;
@@ -491,7 +504,7 @@ export function startDashboard(deps: DashboardDeps): void {
       res.status(400).json({ success: false, error: 'invalid templateId' });
       return;
     }
-    if (!isHttpUrl(targetUrl)) {
+    if (targetUrl && !isHttpUrl(targetUrl)) {
       res.status(400).json({ success: false, error: 'url must be an absolute http:// or https:// URL' });
       return;
     }

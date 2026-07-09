@@ -1,4 +1,4 @@
-# MCP Compiler Server
+# APImeMCP
 
 An MCP (Model Context Protocol) server that implements a "Compiler Pattern" for
 deterministic web-page data extraction: author a plain JavaScript extraction script
@@ -156,9 +156,9 @@ Add to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "mcp-compiler-server": {
+    "apimemcp": {
       "command": "node",
-      "args": ["/absolute/path/to/mcp-compiler-server/dist/index.js"]
+      "args": ["/absolute/path/to/APImeMCP/dist/index.js"]
     }
   }
 }
@@ -174,8 +174,8 @@ official TypeScript SDK's `Client` + `StdioClientTransport`.
 ## Docker
 
 ```bash
-docker build -t mcp-compiler-server .
-docker run -i mcp-compiler-server
+docker build -t apimemcp .
+docker run -i apimemcp
 ```
 
 The image installs Chromium and its OS dependencies at build time
@@ -192,8 +192,9 @@ Save a reusable extraction script for a domain.
 | `templateId` | string | lowercase kebab-case, e.g. `amazon-product` |
 | `domainPattern` | string | e.g. `amazon.com` — matches that hostname and its subdomains |
 | `executableScript` | string | vanilla JavaScript, evaluated via `page.evaluate()`; must return a JSON-serializable value; capped at 100KB |
+| `fixedTargetUrl` | string, optional | for a template that always targets the same page (e.g. "today's deals") — set this and `execute_native_extraction` can omit `targetUrl` entirely. Marked with a ★ badge in the dashboard. |
 
-Returns the saved `{ templateId, domainPattern, scriptPath, createdAt, updatedAt }`.
+Returns the saved `{ templateId, domainPattern, scriptPath, fixedTargetUrl?, createdAt, updatedAt }`.
 
 ### `execute_native_extraction`
 
@@ -201,8 +202,8 @@ Run a registered template against a URL.
 
 | field | type | notes |
 |---|---|---|
-| `targetUrl` | string | absolute `http://` or `https://` URL |
-| `templateId` | string, optional | explicit template; if omitted, resolved from `targetUrl`'s domain |
+| `targetUrl` | string, optional | absolute `http://` or `https://` URL. Omit only when `templateId` refers to a template registered with `fixedTargetUrl` — that URL is used automatically. |
+| `templateId` | string, optional | explicit template; if omitted, resolved from `targetUrl`'s domain (in which case `targetUrl` is required) |
 | `proxyUrl` | string, optional | e.g. `http://user:pass@host:port`, passed through to Playwright's `context.newContext({ proxy })` for routing through an authorized egress proxy or testing region-specific rendering. No automated rotation. |
 
 Returns `{ success, data?, error?, meta: { url, templateId, domainMatched, durationMs, timestamp } }`.
