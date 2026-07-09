@@ -82,7 +82,20 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
         </div>
         <div class="row-qa">
           <input type="text" class="proxy-input mono" placeholder="QA Proxy URL (e.g., http://user:pass@ip:port)" />
-          <input type="password" class="cookie-input mono" placeholder="QA Auth Cookie (name=val; ...)" />
+          <div class="cookie-container">
+            <input type="password" class="cookie-input mono" placeholder="QA Auth Cookie (name=val; ...)" />
+            <span class="info-btn" onclick="toggleInfo(this)" title="How to get this?">&#9432;</span>
+            <div class="cookie-instructions">
+              <strong>How to get a session cookie for your own test account:</strong><br/>
+              Only for an account and domain <em>you</em> control (localhost / staging) &mdash;
+              never a session you don't own.<br/>
+              1. Log into your own account on that domain.<br/>
+              2. Press <strong>F12</strong> to open Developer Tools.<br/>
+              3. Go to the <strong>Application</strong> tab (Chrome) or <strong>Storage</strong> tab (Firefox).<br/>
+              4. Expand <strong>Cookies</strong> on the left and select the domain.<br/>
+              5. Copy the session cookie(s) and format them here as: <code>name=value; name2=value2</code>
+            </div>
+          </div>
           <label class="bandwidth-label mono"><input type="checkbox" class="bandwidth-cb" /> Simulate low bandwidth (block media/CSS)</label>
         </div>
         <pre class="result mono"></pre>
@@ -181,6 +194,23 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
   }
   .proxy-input:focus-visible, .cookie-input:focus-visible { outline: 2px solid var(--phosphor); outline-offset: 1px; }
   .bandwidth-label { display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; }
+  .cookie-container { position: relative; flex: 1; min-width: 160px; }
+  .cookie-container .cookie-input { width: 100%; padding-right: 1.8rem; }
+  .info-btn {
+    position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%);
+    color: var(--text-dim); cursor: pointer; font-size: 0.9rem; line-height: 1;
+    user-select: none; transition: color 0.15s ease;
+  }
+  .info-btn:hover { color: var(--phosphor); }
+  .cookie-instructions {
+    display: none; margin-top: 0.4rem; padding: 0.6rem 0.7rem; background: var(--void);
+    border: 1px solid var(--line); border-radius: 2px; font-size: 0.72rem; line-height: 1.5;
+    color: #94a3b8; font-family: 'IBM Plex Sans', sans-serif;
+  }
+  .cookie-instructions code {
+    font-family: 'IBM Plex Mono', monospace; background: var(--panel-2); padding: 0.05rem 0.3rem;
+    border-radius: 2px; color: var(--text);
+  }
   .btn {
     background: transparent; border: 1px solid var(--phosphor-dim); color: var(--phosphor);
     padding: 0.45rem 1rem; border-radius: 2px; cursor: pointer; font-family: 'IBM Plex Mono', monospace;
@@ -297,6 +327,11 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
 </main>
 
 <script>
+function toggleInfo(btn) {
+  const panel = btn.closest('.cookie-container').querySelector('.cookie-instructions');
+  panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+}
+
 async function runTemplate(templateId, btn) {
   const row = btn.closest('.row');
   const isFixedTarget = row.dataset.fixedTarget === '1';
@@ -448,7 +483,19 @@ function templateRowHtml(entry) {
     '</div>' +
     '<div class="row-qa">' +
       '<input type="text" class="proxy-input mono" placeholder="QA Proxy URL (e.g., http://user:pass@ip:port)" />' +
-      '<input type="password" class="cookie-input mono" placeholder="QA Auth Cookie (name=val; ...)" />' +
+      '<div class="cookie-container">' +
+        '<input type="password" class="cookie-input mono" placeholder="QA Auth Cookie (name=val; ...)" />' +
+        '<span class="info-btn" onclick="toggleInfo(this)" title="How to get this?">&#9432;</span>' +
+        '<div class="cookie-instructions">' +
+          '<strong>How to get a session cookie for your own test account:</strong><br/>' +
+          'Only for an account and domain <em>you</em> control (localhost / staging) &mdash; never a session you don\\'t own.<br/>' +
+          '1. Log into your own account on that domain.<br/>' +
+          '2. Press <strong>F12</strong> to open Developer Tools.<br/>' +
+          '3. Go to the <strong>Application</strong> tab (Chrome) or <strong>Storage</strong> tab (Firefox).<br/>' +
+          '4. Expand <strong>Cookies</strong> on the left and select the domain.<br/>' +
+          '5. Copy the session cookie(s) and format them here as: <code>name=value; name2=value2</code>' +
+        '</div>' +
+      '</div>' +
       '<label class="bandwidth-label mono"><input type="checkbox" class="bandwidth-cb" /> Simulate low bandwidth (block media/CSS)</label>' +
     '</div>' +
     '<pre class="result mono"></pre></div>';

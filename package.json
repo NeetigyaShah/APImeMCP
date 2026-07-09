@@ -1,6 +1,6 @@
 {
   "name": "@neetigyashah/apimemcp",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "MCP server implementing a compiler pattern for deterministic web scraping and data extraction",
   "type": "module",
   "private": false,
