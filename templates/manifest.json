@@ -1,9 +1,0 @@
-{
-  "bernhardt-bed-listing": {
-    "templateId": "bernhardt-bed-listing",
-    "domainPattern": "bernhardt.com",
-    "scriptPath": "templates\\bernhardt-bed-listing.js",
-    "createdAt": "2026-07-09T12:07:31.203Z",
-    "updatedAt": "2026-07-09T12:07:31.203Z"
-  }
-}
