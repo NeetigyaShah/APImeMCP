@@ -8,3 +8,4 @@ output/
 templates/
 bernhardt/
 .mcp-progress.json
+.mcp-dashboard.json

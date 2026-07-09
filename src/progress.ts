@@ -21,3 +21,15 @@ export async function reportProgress(update: ProgressState): Promise<void> {
     // (Windows can EPERM a rename() if the destination is open for read at that instant)
   }
 }
+
+function getDashboardStatusPath(): string {
+  return path.resolve(process.cwd(), '.mcp-dashboard.json');
+}
+
+export async function reportDashboardStatus(port: number): Promise<void> {
+  try {
+    await atomicWriteFile(getDashboardStatusPath(), JSON.stringify({ port, url: `http://127.0.0.1:${port}` }, null, 2));
+  } catch {
+    // ponytail: best-effort UI telemetry, same reasoning as reportProgress above
+  }
+}

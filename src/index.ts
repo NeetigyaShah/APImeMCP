@@ -24,7 +24,7 @@ import { batchDownload } from './downloader.js';
 import { logExtractionMetric, getExtractionStats } from './metrics.js';
 import { sendNotification } from './notifier.js';
 import { Scheduler } from './scheduler.js';
-import { reportProgress } from './progress.js';
+import { reportProgress, reportDashboardStatus } from './progress.js';
 import express from 'express';
 
 const RECENT_LOGS_LIMIT = 5;
@@ -89,13 +89,34 @@ const scheduler = new Scheduler(async (targetUrl, templateId) => {
 const server = new McpServer({ name: 'mcp-compiler-server', version: '1.0.0' });
 
 server.tool('register_extraction_template', RegisterExtractionTemplateShape, async (input) => {
+  await reportProgress({
+    tool: 'register_extraction_template',
+    status: 'running',
+    current: 0,
+    total: 1,
+    message: input.templateId,
+  });
   try {
     const entry = await registerTemplate(input);
     log(`Registered template "${entry.templateId}" for domain "${entry.domainPattern}"`);
+    await reportProgress({
+      tool: 'register_extraction_template',
+      status: 'done',
+      current: 1,
+      total: 1,
+      message: entry.templateId,
+    });
     return { content: [{ type: 'text' as const, text: JSON.stringify(entry, null, 2) }] };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logError(`register_extraction_template failed: ${message}`);
+    await reportProgress({
+      tool: 'register_extraction_template',
+      status: 'failed',
+      current: 0,
+      total: 1,
+      message,
+    });
     return {
       content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: message }) }],
       isError: true,
@@ -340,6 +361,7 @@ function startDashboard(): void {
 
   const httpServer = app.listen(DASHBOARD_PORT, '127.0.0.1', () => {
     log(`Dashboard listening on http://127.0.0.1:${DASHBOARD_PORT}`);
+    void reportDashboardStatus(DASHBOARD_PORT);
   });
   httpServer.on('error', (err) => {
     logError(`Dashboard failed to start: ${err instanceof Error ? err.message : String(err)}`);
