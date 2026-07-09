@@ -25,7 +25,11 @@ import { logExtractionMetric, getExtractionStats } from './metrics.js';
 import { sendNotification } from './notifier.js';
 import { Scheduler } from './scheduler.js';
 import { reportProgress, reportDashboardStatus } from './progress.js';
+import { checkForUpdates } from './updater.js';
+import type { UpdateStatus } from './updater.js';
 import express from 'express';
+
+let updateStatus: UpdateStatus = { updateAvailable: false, latestCommit: null };
 
 const RECENT_LOGS_LIMIT = 5;
 const recentLogs: string[] = [];
@@ -262,7 +266,11 @@ server.registerResource(
       {
         uri: uri.href,
         mimeType: 'application/json',
-        text: JSON.stringify({ browserReady: isBrowserReady(), recentLogs }, null, 2),
+        text: JSON.stringify(
+          { browserReady: isBrowserReady(), recentLogs, updateAvailable: updateStatus.updateAvailable },
+          null,
+          2
+        ),
       },
     ],
   })
@@ -373,6 +381,12 @@ async function main(): Promise<void> {
   await initBrowser();
   await scheduler.loadPersisted();
   startDashboard();
+  void checkForUpdates().then((status) => {
+    updateStatus = status;
+    if (status.updateAvailable) {
+      log('UPDATE AVAILABLE: A newer version of the server is available on GitHub. Please pull the latest changes.');
+    }
+  });
   const transport = new StdioServerTransport();
   await server.connect(transport);
   log('MCP compiler server running on stdio');
