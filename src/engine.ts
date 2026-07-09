@@ -26,6 +26,10 @@ export async function closeBrowser(): Promise<void> {
   await browser.close();
 }
 
+export function isBrowserReady(): boolean {
+  return browserInstance !== undefined;
+}
+
 function getBrowser(): Browser {
   if (!browserInstance) {
     throw new Error('Browser not initialized. Call initBrowser() before executeExtraction().');

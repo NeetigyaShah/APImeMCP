@@ -12,14 +12,24 @@ import {
   findTemplateById,
   findTemplateByUrl,
 } from './storage.js';
-import { initBrowser, closeBrowser, executeExtraction } from './engine.js';
+import { initBrowser, closeBrowser, executeExtraction, isBrowserReady } from './engine.js';
 import { batchDownload } from './downloader.js';
 
+const RECENT_LOGS_LIMIT = 5;
+const recentLogs: string[] = [];
+
+function record(line: string): void {
+  recentLogs.push(line);
+  if (recentLogs.length > RECENT_LOGS_LIMIT) recentLogs.shift();
+}
+
 function log(message: string): void {
+  record(message);
   process.stderr.write(`[mcp-compiler-server] ${message}\n`);
 }
 
 function logError(message: string): void {
+  record(`ERROR: ${message}`);
   process.stderr.write(`[mcp-compiler-server] ERROR: ${message}\n`);
 }
 
@@ -148,6 +158,25 @@ server.registerPrompt(
       ],
     };
   }
+);
+
+server.registerResource(
+  'server_status',
+  'status://server',
+  {
+    title: 'Server Status',
+    description: 'Browser readiness and the last 5 log lines, for debugging a failed extraction.',
+    mimeType: 'application/json',
+  },
+  async (uri) => ({
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: 'application/json',
+        text: JSON.stringify({ browserReady: isBrowserReady(), recentLogs }, null, 2),
+      },
+    ],
+  })
 );
 
 async function main(): Promise<void> {
