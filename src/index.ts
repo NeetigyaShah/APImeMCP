@@ -48,7 +48,13 @@ function logError(message: string): void {
   process.stderr.write(`[mcp-compiler-server] ERROR: ${message}\n`);
 }
 
-async function runExtraction(targetUrl: string, templateId?: string, proxyUrl?: string): Promise<ExtractionResult> {
+async function runExtraction(
+  targetUrl: string,
+  templateId?: string,
+  proxyUrl?: string,
+  cookieString?: string,
+  simulateLowBandwidth?: boolean
+): Promise<ExtractionResult> {
   const startedAt = Date.now();
   const buildMeta = (id: string, domainMatched: string) => ({
     url: targetUrl,
@@ -72,7 +78,7 @@ async function runExtraction(targetUrl: string, templateId?: string, proxyUrl?: 
       return { success: false, error, meta: buildMeta(templateId ?? '', '') };
     }
 
-    const data = await executeExtraction({ targetUrl, scriptPath: entry.scriptPath, proxyUrl });
+    const data = await executeExtraction({ targetUrl, scriptPath: entry.scriptPath, proxyUrl, cookieString, simulateLowBandwidth });
     const imageCount = Array.isArray(data) ? data.length : data ? 1 : 0;
     await logExtractionMetric(entry.templateId, targetUrl, imageCount);
     await reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: targetUrl });

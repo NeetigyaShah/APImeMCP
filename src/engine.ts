@@ -52,6 +52,21 @@ function parseProxy(proxyUrl: string): ProxyConfig {
   return config;
 }
 
+function parseCookieString(cookieString: string, targetUrl: string): Array<{ name: string; value: string; url: string }> {
+  return cookieString
+    .split(';')
+    .map((pair) => pair.trim())
+    .filter(Boolean)
+    .map((pair) => {
+      const eq = pair.indexOf('=');
+      const name = eq === -1 ? pair : pair.slice(0, eq);
+      const value = eq === -1 ? '' : pair.slice(eq + 1);
+      return { name: name.trim(), value: value.trim(), url: targetUrl };
+    });
+}
+
+const LOW_BANDWIDTH_BLOCKED_TYPES = new Set(['image', 'media', 'font', 'stylesheet']);
+
 function assertJsonSerializable(value: unknown): unknown {
   try {
     return JSON.parse(JSON.stringify(value));
@@ -80,6 +95,11 @@ export interface ExecuteExtractionOptions {
   targetUrl: string;
   scriptPath: string;
   proxyUrl?: string;
+  // ponytail: trusted-operator params, same trust model as targetUrl/proxyUrl above —
+  // this is a single-user local tool, not a multi-tenant service. Point cookieString
+  // only at domains/accounts you control.
+  cookieString?: string;
+  simulateLowBandwidth?: boolean;
 }
 
 export async function executeExtraction(options: ExecuteExtractionOptions): Promise<unknown> {
@@ -90,6 +110,18 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
     ...(options.proxyUrl ? { proxy: parseProxy(options.proxyUrl) } : {}),
   });
   try {
+    if (options.cookieString) {
+      await context.addCookies(parseCookieString(options.cookieString, options.targetUrl));
+    }
+    if (options.simulateLowBandwidth) {
+      await context.route('**/*', (route) => {
+        if (LOW_BANDWIDTH_BLOCKED_TYPES.has(route.request().resourceType())) {
+          void route.abort();
+        } else {
+          void route.continue();
+        }
+      });
+    }
     await context.addInitScript(() => {
       // @ts-expect-error - this callback runs in the browser context, where `navigator`
       // is a global; the project's tsconfig intentionally omits the DOM lib for the
@@ -100,7 +132,17 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
     try {
       await page.goto(options.targetUrl, { timeout: NAVIGATION_TIMEOUT_MS, waitUntil: 'networkidle' });
       const script = await fs.readFile(path.resolve(process.cwd(), options.scriptPath), 'utf8');
-      const rawResult = await page.evaluate(script);
+      // ponytail: page.evaluate(stringExpression) does NOT auto-invoke a bare function
+      // expression (verified live: `page.evaluate('() => 42')` returns undefined, not 42) -
+      // it only awaits a promise if the expression's own evaluation already produced one.
+      // Templates are written either way (bare `async () => {...}` or a self-invoking
+      // `(async () => {...})()`), so eval the source in-page and call it only if it's
+      // still a function, rather than picking one convention and breaking the other.
+      const rawResult = await page.evaluate((src) => {
+        // eslint-disable-next-line no-eval
+        const value = (0, eval)(src);
+        return typeof value === 'function' ? value() : value;
+      }, script);
       return assertJsonSerializable(rawResult);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

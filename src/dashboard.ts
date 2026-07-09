@@ -13,7 +13,13 @@ const DASHBOARD_PORT = 3000;
 const LOGS_DIR = path.resolve(process.cwd(), 'output', 'logs');
 
 export interface DashboardDeps {
-  runExtraction: (targetUrl: string, templateId?: string) => Promise<ExtractionResult>;
+  runExtraction: (
+    targetUrl: string,
+    templateId?: string,
+    proxyUrl?: string,
+    cookieString?: string,
+    simulateLowBandwidth?: boolean
+  ) => Promise<ExtractionResult>;
   scheduler: Scheduler;
   isBrowserReady: () => boolean;
   log: (message: string) => void;
@@ -68,6 +74,11 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
         <div class="row-controls">
           <input type="text" class="url-input mono" placeholder="https://example.com/page" />
           <button class="btn run-btn" onclick="runTemplate('${entry.templateId}', this)">Run</button>
+        </div>
+        <div class="row-qa">
+          <input type="text" class="proxy-input mono" placeholder="QA Proxy URL (e.g., http://user:pass@ip:port)" />
+          <input type="password" class="cookie-input mono" placeholder="QA Auth Cookie (name=val; ...)" />
+          <label class="bandwidth-label mono"><input type="checkbox" class="bandwidth-cb" /> Simulate low bandwidth (block media/CSS)</label>
         </div>
         <pre class="result mono"></pre>
       </div>`
@@ -156,6 +167,13 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
     border: 1px solid var(--line); border-radius: 2px; color: var(--text); font-size: 0.85rem;
   }
   .url-input:focus-visible { outline: 2px solid var(--phosphor); outline-offset: 1px; }
+  .row-qa { display: flex; gap: 0.5rem; margin-top: 0.4rem; flex-wrap: wrap; align-items: center; }
+  .proxy-input, .cookie-input {
+    flex: 1; min-width: 160px; padding: 0.4rem 0.6rem; background: var(--void);
+    border: 1px solid var(--line); border-radius: 2px; color: var(--text-dim); font-size: 0.78rem;
+  }
+  .proxy-input:focus-visible, .cookie-input:focus-visible { outline: 2px solid var(--phosphor); outline-offset: 1px; }
+  .bandwidth-label { display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; }
   .btn {
     background: transparent; border: 1px solid var(--phosphor-dim); color: var(--phosphor);
     padding: 0.45rem 1rem; border-radius: 2px; cursor: pointer; font-family: 'IBM Plex Mono', monospace;
@@ -225,7 +243,7 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
 <main>
   <section>
     <h2>Templates</h2>
-    <div class="panel">
+    <div class="panel" id="templates-panel">
       ${templateRows || '<div class="empty">No templates registered yet. Use register_extraction_template.</div>'}
     </div>
   </section>
@@ -274,14 +292,20 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
 <script>
 async function runTemplate(templateId, btn) {
   const row = btn.closest('.row');
-  const input = row.querySelector('.url-input');
+  const url = row.querySelector('.url-input').value.trim();
+  const proxyUrl = row.querySelector('.proxy-input').value.trim();
+  const cookieString = row.querySelector('.cookie-input').value.trim();
+  const simulateLowBandwidth = row.querySelector('.bandwidth-cb').checked;
   const result = row.querySelector('.result');
-  const url = input.value.trim();
   if (!url) { result.textContent = 'Enter a URL first'; return; }
   btn.disabled = true;
   result.textContent = 'Running...';
   try {
-    const res = await fetch('/api/run/' + encodeURIComponent(templateId) + '?url=' + encodeURIComponent(url));
+    const res = await fetch('/api/run/' + encodeURIComponent(templateId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, proxyUrl, cookieString, simulateLowBandwidth }),
+    });
     const data = await res.json();
     result.textContent = JSON.stringify(data, null, 2);
   } catch (err) {
@@ -396,12 +420,51 @@ async function loadLogs() {
   }
 }
 
+let knownTemplateIds = ${JSON.stringify(templates.map((t) => t.templateId).sort())};
+
+function templateRowHtml(entry) {
+  return '<div class="row" data-template-id="' + entry.templateId + '">' +
+    '<div class="row-main">' +
+      '<span class="mono id">' + entry.templateId + '</span>' +
+      '<span class="mono domain">' + entry.domainPattern + '</span>' +
+      '<span class="mono ts dim">' + entry.updatedAt + '</span>' +
+    '</div>' +
+    '<div class="row-controls">' +
+      '<input type="text" class="url-input mono" placeholder="https://example.com/page" />' +
+      '<button class="btn run-btn" onclick="runTemplate(\\'' + entry.templateId + '\\', this)">Run</button>' +
+    '</div>' +
+    '<div class="row-qa">' +
+      '<input type="text" class="proxy-input mono" placeholder="QA Proxy URL (e.g., http://user:pass@ip:port)" />' +
+      '<input type="password" class="cookie-input mono" placeholder="QA Auth Cookie (name=val; ...)" />' +
+      '<label class="bandwidth-label mono"><input type="checkbox" class="bandwidth-cb" /> Simulate low bandwidth (block media/CSS)</label>' +
+    '</div>' +
+    '<pre class="result mono"></pre></div>';
+}
+
+async function loadTemplates() {
+  try {
+    const res = await fetch('/api/templates');
+    const list = await res.json();
+    const ids = list.map(function (t) { return t.templateId; }).sort();
+    if (JSON.stringify(ids) === JSON.stringify(knownTemplateIds)) return;
+    knownTemplateIds = ids;
+    const panel = document.getElementById('templates-panel');
+    panel.innerHTML = list.length
+      ? list.map(templateRowHtml).join('')
+      : '<div class="empty">No templates registered yet. Use register_extraction_template.</div>';
+  } catch {
+    // best-effort refresh, keep showing the last known list on failure
+  }
+}
+
 pollProgress();
 pollStats();
 loadJobs();
 loadLogs();
+loadTemplates();
 setInterval(pollProgress, 2000);
 setInterval(pollStats, 5000);
+setInterval(loadTemplates, 5000);
 </script>
 </body>
 </html>`;
@@ -416,20 +479,24 @@ export function startDashboard(deps: DashboardDeps): void {
     res.type('html').send(renderDashboard(manifest, deps.isBrowserReady()));
   });
 
-  app.get('/api/run/:templateId', async (req, res) => {
+  app.post('/api/run/:templateId', async (req, res) => {
     const { templateId } = req.params;
-    const targetUrl = typeof req.query.url === 'string' ? req.query.url : '';
+    const body = req.body ?? {};
+    const targetUrl = typeof body.url === 'string' ? body.url : '';
+    const proxyUrl = typeof body.proxyUrl === 'string' && body.proxyUrl ? body.proxyUrl : undefined;
+    const cookieString = typeof body.cookieString === 'string' && body.cookieString ? body.cookieString : undefined;
+    const simulateLowBandwidth = body.simulateLowBandwidth === true;
 
     if (!RegisterExtractionTemplateShape.templateId.safeParse(templateId).success) {
       res.status(400).json({ success: false, error: 'invalid templateId' });
       return;
     }
     if (!isHttpUrl(targetUrl)) {
-      res.status(400).json({ success: false, error: 'url query param must be an absolute http:// or https:// URL' });
+      res.status(400).json({ success: false, error: 'url must be an absolute http:// or https:// URL' });
       return;
     }
 
-    const result = await deps.runExtraction(targetUrl, templateId);
+    const result = await deps.runExtraction(targetUrl, templateId, proxyUrl, cookieString, simulateLowBandwidth);
     res.json(result);
   });
 
@@ -467,6 +534,10 @@ export function startDashboard(deps: DashboardDeps): void {
 
   app.get('/api/logs', async (_req, res) => {
     res.json(await listForensicLogs());
+  });
+
+  app.get('/api/templates', async (_req, res) => {
+    res.json(Object.values(await loadManifest()));
   });
 
   app.use('/logs', express.static(LOGS_DIR));

@@ -135,6 +135,20 @@ and logs `UPDATE AVAILABLE: ...`, and the `status://server` MCP resource exposes
 `updateAvailable: true/false` so an agent can check programmatically instead of you
 watching stderr.
 
+#### Optional: the `using-apimemcp` skill
+
+The package ships a Claude Code skill (`skills/using-apimemcp/SKILL.md`) that
+teaches an agent this server's tool signatures and the compiler-pattern
+workflow up front, so it doesn't need to rediscover them by trial and error
+each session. Activate it once per machine:
+
+```bash
+mkdir -p ~/.claude/skills/using-apimemcp
+cp "$(npm root -g)/@neetigyashah/apimemcp/skills/using-apimemcp/SKILL.md" ~/.claude/skills/using-apimemcp/SKILL.md
+```
+
+(from source: `cp skills/using-apimemcp/SKILL.md ~/.claude/skills/using-apimemcp/SKILL.md`)
+
 ### Claude Desktop
 
 Add to `claude_desktop_config.json`:
