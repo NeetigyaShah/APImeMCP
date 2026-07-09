@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { RegisterExtractionTemplateShape, ExecuteNativeExtractionShape, BatchDownloadShape } from './types.js';
@@ -122,6 +124,31 @@ server.tool('batch_download_assets', BatchDownloadShape, async (input) => {
     };
   }
 });
+
+server.registerPrompt(
+  'get_environment_context',
+  {
+    title: 'Environment Context',
+    description: 'Local architecture/environment notes from ENVIRONMENT_CONTEXT.md, if present.',
+  },
+  async () => {
+    const filePath = path.resolve(process.cwd(), 'ENVIRONMENT_CONTEXT.md');
+    let text: string;
+    try {
+      text = await fs.readFile(filePath, 'utf8');
+    } catch {
+      text = 'Architecture notes are uninitialized (ENVIRONMENT_CONTEXT.md not found).';
+    }
+    return {
+      messages: [
+        {
+          role: 'user' as const,
+          content: { type: 'text' as const, text },
+        },
+      ],
+    };
+  }
+);
 
 async function main(): Promise<void> {
   await ensureStorageInitialized();
