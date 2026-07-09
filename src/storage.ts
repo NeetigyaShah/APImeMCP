@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Manifest, ManifestEntry, RegisterExtractionTemplateInput } from './types.js';
+import { withLock } from './lock.js';
 
 function getTemplatesDir(): string {
   return path.resolve(process.cwd(), 'templates');
@@ -44,24 +45,26 @@ export async function saveManifest(manifest: Manifest): Promise<void> {
 }
 
 export async function registerTemplate(input: RegisterExtractionTemplateInput): Promise<ManifestEntry> {
-  const manifest = await loadManifest();
-  const now = new Date().toISOString();
+  return withLock(async () => {
+    const manifest = await loadManifest();
+    const now = new Date().toISOString();
 
-  const templatesDir = getTemplatesDir();
-  const scriptFileName = `${input.templateId}.js`;
-  await fs.writeFile(path.join(templatesDir, scriptFileName), input.executableScript, 'utf8');
+    const templatesDir = getTemplatesDir();
+    const scriptFileName = `${input.templateId}.js`;
+    await fs.writeFile(path.join(templatesDir, scriptFileName), input.executableScript, 'utf8');
 
-  const existing = manifest[input.templateId];
-  const entry: ManifestEntry = {
-    templateId: input.templateId,
-    domainPattern: input.domainPattern,
-    scriptPath: path.join('templates', scriptFileName),
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
-  };
-  manifest[input.templateId] = entry;
-  await saveManifest(manifest);
-  return entry;
+    const existing = manifest[input.templateId];
+    const entry: ManifestEntry = {
+      templateId: input.templateId,
+      domainPattern: input.domainPattern,
+      scriptPath: path.join('templates', scriptFileName),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    manifest[input.templateId] = entry;
+    await saveManifest(manifest);
+    return entry;
+  });
 }
 
 export function findTemplateById(manifest: Manifest, templateId: string): ManifestEntry | undefined {

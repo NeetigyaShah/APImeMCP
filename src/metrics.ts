@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { withLock } from './lock.js';
 
 const CSV_HEADER = 'timestamp,templateId,url,imageCount\n';
 
@@ -40,19 +41,21 @@ function parseCsvLine(line: string): string[] {
 }
 
 export async function logExtractionMetric(templateId: string, url: string, imageCount: number): Promise<void> {
-  const filePath = getMetricsPath();
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const row = `${new Date().toISOString()},${csvEscape(templateId)},${csvEscape(url)},${imageCount}\n`;
+  await withLock(async () => {
+    const filePath = getMetricsPath();
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    const row = `${new Date().toISOString()},${csvEscape(templateId)},${csvEscape(url)},${imageCount}\n`;
 
-  const exists = await fs.access(filePath).then(
-    () => true,
-    () => false
-  );
-  if (!exists) {
-    await fs.writeFile(filePath, CSV_HEADER + row, 'utf8');
-  } else {
-    await fs.appendFile(filePath, row, 'utf8');
-  }
+    const exists = await fs.access(filePath).then(
+      () => true,
+      () => false
+    );
+    if (!exists) {
+      await fs.writeFile(filePath, CSV_HEADER + row, 'utf8');
+    } else {
+      await fs.appendFile(filePath, row, 'utf8');
+    }
+  });
 }
 
 export interface ExtractionStats {

@@ -12,7 +12,7 @@ export interface UpdateStatus {
 
 function getLocalCommitSha(): string | null {
   try {
-    return execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+    return execSync('git rev-parse HEAD', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return null;
   }
