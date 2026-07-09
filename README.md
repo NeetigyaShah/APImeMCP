@@ -76,14 +76,24 @@ real headless Chromium instance; they require `npm run build` and
 **Easiest — published on npm, no clone or build required:**
 
 ```bash
-claude mcp add --scope user --transport stdio apimemcp -- npx -y @neetigyashah/apimemcp
+npm install -g @neetigyashah/apimemcp
+claude mcp add --scope user --transport stdio apimemcp -- apimemcp
 ```
 
-`npx` fetches, caches, and runs the package on demand — the first run downloads it
-(and its Chromium binary, via a `postinstall` step) automatically. `--scope user`
-registers it globally, available in every project and session; drop that flag (and
-just run `claude mcp add apimemcp -- npx -y @neetigyashah/apimemcp`) to scope it to
-the current project only.
+`--scope user` registers it globally, available in every project and session; drop
+that flag to scope it to the current project only. The global install also runs a
+`postinstall` step that fetches the Chromium binary Playwright needs.
+
+> **Why a real global install instead of `npx -y @neetigyashah/apimemcp`?** They
+> should be equivalent, but `npx`'s on-demand bin resolution for scoped packages has
+> a known flakiness on some npm/Windows combinations — verified directly: the
+> package's shim scripts are correct and run fine when invoked by path, but `npx`
+> itself fails to add its own cache directory to the child process's `PATH` before
+> executing (reproducible even against other unrelated npx-based MCP servers on an
+> affected machine, not specific to this package). A real `npm install -g` uses the
+> standard global-bin mechanism instead, which doesn't have this failure mode. Feel
+> free to try the `npx` one-liner first — if `claude mcp list` shows it connected,
+> great — but fall back to the global install above if it shows "Failed to connect."
 
 Verify it's connected:
 
@@ -95,10 +105,8 @@ claude mcp get apimemcp  # shows scope, command, and args for this one
 Once connected, every tool below is directly callable by name — no separate API
 layer to learn, the tool list below *is* the API.
 
-**Keeping it up to date**: `npx` re-resolves the package on each launch against its
-local cache, so a new release may need `npx clear-npx-cache` (or `npx -y
-@neetigyashah/apimemcp@latest` once) to pick up immediately rather than waiting for
-npx's normal cache expiry. The server itself will tell you when it's behind —
+**Keeping it up to date**: `npm update -g @neetigyashah/apimemcp` pulls the latest
+published version. The server itself will tell you when it's behind —
 `checkForUpdates()` compares against the latest commit on GitHub at startup and
 logs `UPDATE AVAILABLE: ...`; the `status://server` MCP resource also exposes this
 as `updateAvailable: true/false` so an agent can check it programmatically.
