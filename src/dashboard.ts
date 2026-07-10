@@ -12,6 +12,7 @@ import type { Scheduler, ScheduledJob } from './scheduler.js';
 
 const DASHBOARD_PORT = 3000;
 const LOGS_DIR = path.resolve(process.cwd(), 'output', 'logs');
+const APIS_DIR = path.resolve(process.cwd(), 'apis');
 
 export interface DashboardDeps {
   runExtraction: (
@@ -96,6 +97,7 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
               ? `<button class="btn watch-btn" onclick="runTemplate('${entry.templateId}', this, true)" title="Run in a visible browser window so you can watch it">&#128065; Watch</button>`
               : ''
           }
+          <a class="usage-link mono" href="/apis/${entry.templateId}.md" target="_blank" title="Console commands to run this API without the dashboard">usage &#8599;</a>
         </div>
         <div class="row-qa">
           <input type="text" class="proxy-input mono" placeholder="QA Proxy URL (e.g., http://user:pass@ip:port)" />
@@ -240,6 +242,8 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
   .watch-btn { border-color: var(--ok); color: var(--ok); flex-shrink: 0; }
   .watch-btn:hover:not(:disabled) { background: var(--ok); color: var(--ink); }
   .watch-btn:disabled { color: var(--ok); }
+  .usage-link { align-self: center; font-size: 0.75rem; color: var(--text-dim); text-decoration: none; white-space: nowrap; }
+  .usage-link:hover { color: var(--phosphor); text-decoration: underline; }
   .result:empty { display: none; }
   .result {
     margin: 0.6rem 0 0; padding: 0.6rem; background: var(--void); border-radius: 2px;
@@ -510,6 +514,7 @@ function templateRowHtml(entry) {
       (entry.kind === 'action-sequence'
         ? '<button class="btn watch-btn" onclick="runTemplate(\\'' + entry.templateId + '\\', this, true)" title="Run in a visible browser window so you can watch it">&#128065; Watch</button>'
         : '') +
+      '<a class="usage-link mono" href="/apis/' + entry.templateId + '.md" target="_blank" title="Console commands to run this API without the dashboard">usage &#8599;</a>' +
     '</div>' +
     '<div class="row-qa">' +
       '<input type="text" class="proxy-input mono" placeholder="QA Proxy URL (e.g., http://user:pass@ip:port)" />' +
@@ -683,6 +688,8 @@ export function startDashboard(deps: DashboardDeps): void {
   });
 
   app.use('/logs', express.static(LOGS_DIR));
+  // Serve the generated per-template usage guides so the "usage" row link resolves.
+  app.use('/apis', express.static(APIS_DIR, { setHeaders: (res) => res.type('text/plain') }));
 
   const httpServer = app.listen(DASHBOARD_PORT, '127.0.0.1', () => {
     deps.log(`Dashboard listening on http://127.0.0.1:${DASHBOARD_PORT}`);

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ActionSequence, Manifest, ManifestEntry, RegisterExtractionTemplateInput } from './types.js';
 import { withLock } from './lock.js';
+import { writeUsageReadme } from './usage.js';
 
 function getTemplatesDir(): string {
   return path.resolve(process.cwd(), 'templates');
@@ -64,6 +65,7 @@ export async function registerTemplate(input: RegisterExtractionTemplateInput): 
     };
     manifest[input.templateId] = entry;
     await saveManifest(manifest);
+    await writeUsageReadme(entry, entry.fixedTargetUrl);
     return entry;
   });
 }
@@ -92,6 +94,7 @@ export async function registerActionSequenceTemplate(input: {
     };
     manifest[input.templateId] = entry;
     await saveManifest(manifest);
+    await writeUsageReadme(entry, entry.fixedTargetUrl);
     return entry;
   });
 }

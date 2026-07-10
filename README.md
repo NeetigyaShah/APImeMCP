@@ -57,6 +57,28 @@ npm start
 The server communicates over stdio — it's meant to be spawned by an MCP client, not
 run interactively.
 
+## Using a template without an MCP client or the dashboard UI
+
+Every registered template is also a plain HTTP endpoint on the running server, so you
+can call it straight from a terminal — no Claude Code, no clicking the dashboard:
+
+```bash
+curl -X POST http://127.0.0.1:3000/api/run/<templateId> \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/page"}'     # omit url for fixed-target / recorded templates: -d '{}'
+```
+
+Each template gets its own copy-paste guide at `apis/<templateId>.md`, auto-written when
+it's registered and filled in with that template's real last-run URL. Regenerate them
+all (e.g. after registering new ones) with:
+
+```bash
+node scripts/gen-usage.mjs
+```
+
+The dashboard's per-template rows link to these guides ("usage ↗"). See `apis/README.md`
+for the index once you've registered at least one template.
+
 ## Test
 
 ```bash
