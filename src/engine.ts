@@ -4,6 +4,7 @@ import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import type { ActionSequence, ActionStep } from './types.js';
 
 // Inject stealth plugin globally into the chromium instance
 chromium.use(stealthPlugin());
@@ -151,6 +152,116 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
         throw new Error(`Extraction failed: ${message} (forensic artifacts: ${screenshotPath}, ${domPath})`);
       } catch (captureErr) {
         if (captureErr instanceof Error && captureErr.message.startsWith('Extraction failed:')) {
+          throw captureErr;
+        }
+        // Forensic capture itself failed (e.g. page already closed) - don't mask the real error.
+        throw err;
+      }
+    }
+  } finally {
+    await context.close();
+  }
+}
+
+function mapSameSite(sameSite: unknown): 'Strict' | 'Lax' | 'None' {
+  if (sameSite === 'no_restriction') return 'None';
+  if (sameSite === 'strict') return 'Strict';
+  if (sameSite === 'lax') return 'Lax';
+  return 'Lax';
+}
+
+function mapChromeCookies(cookies: Array<Record<string, unknown>>) {
+  return cookies.map((c) => ({
+    name: String(c.name),
+    value: String(c.value),
+    domain: String(c.domain),
+    path: String(c.path ?? '/'),
+    secure: !!c.secure,
+    httpOnly: !!c.httpOnly,
+    expires: typeof c.expirationDate === 'number' ? c.expirationDate : -1,
+    sameSite: mapSameSite(c.sameSite),
+  }));
+}
+
+const STEP_SELECTOR_TIMEOUT_MS = 3000;
+
+async function runActionStep(page: Page, step: ActionStep): Promise<void> {
+  if (step.type === 'navigate') {
+    await page.goto(step.url ?? '', { waitUntil: 'networkidle', timeout: NAVIGATION_TIMEOUT_MS });
+    return;
+  }
+  if (step.type === 'waitForNavigation') {
+    await page.waitForLoadState('networkidle', { timeout: NAVIGATION_TIMEOUT_MS });
+    return;
+  }
+  const selectors = step.selectors ?? [];
+  for (const selector of selectors) {
+    try {
+      const locator = page.locator(selector).first();
+      if (step.type === 'click') {
+        await locator.click({ timeout: STEP_SELECTOR_TIMEOUT_MS });
+      } else if (step.type === 'fill') {
+        await locator.fill(step.value ?? '', { timeout: STEP_SELECTOR_TIMEOUT_MS });
+      } else if (step.type === 'select') {
+        await locator.selectOption(step.value ?? '', { timeout: STEP_SELECTOR_TIMEOUT_MS });
+      }
+      return;
+    } catch {
+      // this selector didn't work - fall through and try the next fallback candidate
+    }
+  }
+  throw new Error(`no working selector for ${step.type} (tried: ${selectors.join(', ') || 'none provided'})`);
+}
+
+export interface ExecuteActionSequenceOptions {
+  sequence: ActionSequence;
+  proxyUrl?: string;
+  simulateLowBandwidth?: boolean;
+}
+
+export async function executeActionSequence(options: ExecuteActionSequenceOptions): Promise<void> {
+  const browser = getBrowser();
+  const context = await browser.newContext({
+    userAgent: USER_AGENT,
+    viewport: VIEWPORT,
+    ...(options.proxyUrl ? { proxy: parseProxy(options.proxyUrl) } : {}),
+  });
+  try {
+    if (options.sequence.cookies) {
+      await context.addCookies(mapChromeCookies(options.sequence.cookies));
+    }
+    if (options.simulateLowBandwidth) {
+      await context.route('**/*', (route) => {
+        if (LOW_BANDWIDTH_BLOCKED_TYPES.has(route.request().resourceType())) {
+          void route.abort();
+        } else {
+          void route.continue();
+        }
+      });
+    }
+    await context.addInitScript(() => {
+      // @ts-expect-error - this callback runs in the browser context, where `navigator`
+      // is a global; the project's tsconfig intentionally omits the DOM lib for the
+      // Node.js runtime code, so TypeScript cannot see it here.
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    });
+    const page = await context.newPage();
+    let stepIndex = -1; // -1 = still navigating to startUrl, not yet inside the step loop
+    try {
+      await page.goto(options.sequence.startUrl, { waitUntil: 'networkidle', timeout: NAVIGATION_TIMEOUT_MS });
+      for (stepIndex = 0; stepIndex < options.sequence.steps.length; stepIndex++) {
+        await runActionStep(page, options.sequence.steps[stepIndex]);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const where = stepIndex === -1 ? 'navigating to startUrl' : `at step ${stepIndex + 1}`;
+      try {
+        const { screenshotPath, domPath } = await captureForensics(page);
+        throw new Error(
+          `Action sequence failed ${where}: ${message} (forensic artifacts: ${screenshotPath}, ${domPath})`
+        );
+      } catch (captureErr) {
+        if (captureErr instanceof Error && captureErr.message.startsWith('Action sequence failed')) {
           throw captureErr;
         }
         // Forensic capture itself failed (e.g. page already closed) - don't mask the real error.

@@ -79,6 +79,23 @@ export const SendNotificationShape = {
 export const SendNotificationInputSchema = z.object(SendNotificationShape);
 export type SendNotificationInput = z.infer<typeof SendNotificationInputSchema>;
 
+export interface ActionStep {
+  type: 'click' | 'fill' | 'select' | 'navigate' | 'waitForNavigation';
+  selectors?: string[]; // ordered fallback candidates, e.g. ["[data-testid=submit]", "button:has-text('Submit')"]
+  value?: string; // for fill/select
+  url?: string; // for navigate
+}
+
+export interface ActionSequence {
+  startUrl: string;
+  steps: ActionStep[];
+  // Raw chrome.cookies.getAll() shape (name, value, domain, path, secure, httpOnly, sameSite,
+  // expirationDate, ...) - NOT yet mapped to Playwright's addCookies shape. The server maps
+  // chrome cookie fields -> Playwright's shape (expirationDate -> expires; sameSite
+  // 'no_restriction'|'lax'|'strict'|undefined -> 'None'|'Lax'|'Strict', default 'Lax').
+  cookies?: Array<Record<string, unknown>>;
+}
+
 export interface ManifestEntry {
   templateId: string;
   domainPattern: string;
@@ -86,6 +103,8 @@ export interface ManifestEntry {
   fixedTargetUrl?: string;
   createdAt: string;
   updatedAt: string;
+  kind?: 'extraction' | 'action-sequence';
+  lastVerified?: { success: boolean; error?: string; timestamp: string };
 }
 
 export type Manifest = Record<string, ManifestEntry>;

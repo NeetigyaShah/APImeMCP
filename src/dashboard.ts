@@ -1,10 +1,11 @@
 import express from 'express';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { loadManifest } from './storage.js';
+import { loadManifest, registerActionSequenceTemplate, updateVerificationStatus } from './storage.js';
 import { RegisterExtractionTemplateShape, ScheduleStockCheckShape, isHttpUrl } from './types.js';
-import type { Manifest, ExtractionResult } from './types.js';
+import type { Manifest, ExtractionResult, ActionStep } from './types.js';
 import { getExtractionStats } from './metrics.js';
 import { getProgress, reportDashboardStatus } from './progress.js';
 import type { Scheduler, ScheduledJob } from './scheduler.js';
@@ -53,6 +54,14 @@ async function listForensicLogs(): Promise<LogEntry[]> {
   return Array.from(byPrefix.values()).sort((a, b) => (a.prefix < b.prefix ? 1 : -1));
 }
 
+function slugify(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || `recording-${randomBytes(3).toString('hex')}`;
+}
+
 function cronColumns(expr: string): string[] {
   const parts = expr.trim().split(/\s+/);
   while (parts.length < 5) parts.push('*');
@@ -69,6 +78,8 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
         <div class="row-main">
           <span class="mono id">${entry.templateId}</span>
           ${entry.fixedTargetUrl ? `<span class="mono fixed-badge" title="${entry.fixedTargetUrl}">&#9733; no input needed</span>` : ''}
+          ${entry.kind === 'action-sequence' ? '<span class="mono kind-badge" title="Action-sequence template">&#9881; action-sequence</span>' : ''}
+          ${entry.lastVerified ? `<span class="dot ${entry.lastVerified.success ? 'on' : 'off'}" title="${entry.lastVerified.success ? 'Last verified OK' : (entry.lastVerified.error ?? 'Last verification failed')}"></span>` : ''}
           <span class="mono domain">${entry.domainPattern}</span>
           <span class="mono ts dim">${entry.updatedAt}</span>
         </div>
@@ -179,6 +190,7 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
   .id { color: var(--phosphor); font-weight: 600; }
   .domain { color: var(--text); }
   .fixed-badge { color: var(--ok); font-size: 0.75rem; }
+  .kind-badge { color: var(--text-dim); font-size: 0.75rem; }
   .fixed-url { flex: 1; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ts { font-size: 0.75rem; margin-left: auto; }
   .row-controls { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
@@ -472,6 +484,8 @@ function templateRowHtml(entry) {
     '<div class="row-main">' +
       '<span class="mono id">' + entry.templateId + '</span>' +
       (fixed ? '<span class="mono fixed-badge" title="' + entry.fixedTargetUrl + '">&#9733; no input needed</span>' : '') +
+      (entry.kind === 'action-sequence' ? '<span class="mono kind-badge" title="Action-sequence template">&#9881; action-sequence</span>' : '') +
+      (entry.lastVerified ? '<span class="dot ' + (entry.lastVerified.success ? 'on' : 'off') + '" title="' + (entry.lastVerified.success ? 'Last verified OK' : (entry.lastVerified.error || 'Last verification failed')) + '"></span>' : '') +
       '<span class="mono domain">' + entry.domainPattern + '</span>' +
       '<span class="mono ts dim">' + entry.updatedAt + '</span>' +
     '</div>' +
@@ -598,6 +612,54 @@ export function startDashboard(deps: DashboardDeps): void {
 
   app.get('/api/templates', async (_req, res) => {
     res.json(Object.values(await loadManifest()));
+  });
+
+  // CORS is scoped to just this one route: it's the only endpoint an external
+  // origin (the recorder extension's chrome-extension:// background worker) needs to
+  // reach, and the server otherwise only binds to 127.0.0.1 for same-origin dashboard use.
+  app.options('/api/recordings', (_req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.status(204).end();
+  });
+
+  app.post('/api/recordings', async (req, res) => {
+    try {
+      const body = req.body ?? {};
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      const startUrl = typeof body.startUrl === 'string' ? body.startUrl : '';
+      const steps = body.steps as ActionStep[];
+
+      res.set('Access-Control-Allow-Origin', '*');
+
+      if (!name) {
+        res.status(400).json({ success: false, error: 'name must not be empty' });
+        return;
+      }
+      if (!isHttpUrl(startUrl)) {
+        res.status(400).json({ success: false, error: 'startUrl must be an absolute http:// or https:// URL' });
+        return;
+      }
+      if (!Array.isArray(steps)) {
+        res.status(400).json({ success: false, error: 'steps must be an array' });
+        return;
+      }
+
+      const templateId = slugify(name);
+      await registerActionSequenceTemplate({
+        templateId,
+        sequence: { startUrl, steps, cookies: Array.isArray(body.cookies) ? body.cookies : undefined },
+      });
+
+      const result = await deps.runExtraction(startUrl, templateId);
+      await updateVerificationStatus(templateId, { success: result.success, error: result.error });
+
+      res.json({ success: true, templateId, verified: result.success, error: result.success ? undefined : result.error });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ success: false, error: message });
+    }
   });
 
   app.use('/logs', express.static(LOGS_DIR));

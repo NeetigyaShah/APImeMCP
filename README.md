@@ -181,6 +181,21 @@ docker run -i apimemcp
 The image installs Chromium and its OS dependencies at build time
 (`npx playwright install --with-deps chromium`) and runs as a non-root user.
 
+## Recorder extension (record-once, replay via APImeMCP)
+
+`extension/` is a Chrome MV3 extension, separate from the npm package - it's not
+included in the published tarball, so get it by cloning this repo. It records
+clicks/typing/navigation in a normal browser tab, then sends the recording (plus
+cookies for replay) to this server's `POST /api/recordings` endpoint, which
+registers it as a new **action-sequence** template - a different kind from the
+page.evaluate() extraction templates above: instead of returning scraped data, it
+replays the literal recorded steps (click, fill, select, navigate) headlessly via
+Playwright, useful for repeating a workflow (e.g. "post a video," "submit a form")
+rather than extracting a page's contents. It's auto-verified once immediately after
+registering, and shows up in the dashboard alongside extraction templates with an
+"action-sequence" badge and a pass/fail status dot. See `extension/README.md` for
+how to load it (`chrome://extensions` → Developer mode → Load unpacked).
+
 ## Tools
 
 ### `register_extraction_template`
@@ -209,6 +224,12 @@ Run a registered template against a URL.
 Returns `{ success, data?, error?, meta: { url, templateId, domainMatched, durationMs, timestamp } }`.
 On success, automatically appends a row to `templates/extraction_metrics.csv`
 (see `get_extraction_stats` below) — no separate step required.
+
+If the resolved template was registered as an **action-sequence** (via the recorder
+extension's `/api/recordings` endpoint, not `register_extraction_template`), this
+replays the recorded click/fill/select/navigate steps headlessly instead of running a
+`page.evaluate()` script — `data` is just `{ completedSteps }` rather than scraped
+content. See "Recorder extension" above.
 
 ### `batch_download_assets`
 

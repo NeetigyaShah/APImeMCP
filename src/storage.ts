@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { Manifest, ManifestEntry, RegisterExtractionTemplateInput } from './types.js';
+import type { ActionSequence, Manifest, ManifestEntry, RegisterExtractionTemplateInput } from './types.js';
 import { withLock } from './lock.js';
 
 function getTemplatesDir(): string {
@@ -65,6 +65,47 @@ export async function registerTemplate(input: RegisterExtractionTemplateInput): 
     manifest[input.templateId] = entry;
     await saveManifest(manifest);
     return entry;
+  });
+}
+
+export async function registerActionSequenceTemplate(input: {
+  templateId: string;
+  sequence: ActionSequence;
+}): Promise<ManifestEntry> {
+  return withLock(async () => {
+    const manifest = await loadManifest();
+    const now = new Date().toISOString();
+
+    const templatesDir = getTemplatesDir();
+    const scriptFileName = `${input.templateId}.json`;
+    await fs.writeFile(path.join(templatesDir, scriptFileName), JSON.stringify(input.sequence, null, 2), 'utf8');
+
+    const existing = manifest[input.templateId];
+    const entry: ManifestEntry = {
+      templateId: input.templateId,
+      domainPattern: new URL(input.sequence.startUrl).hostname.toLowerCase(),
+      scriptPath: path.join('templates', scriptFileName),
+      fixedTargetUrl: input.sequence.startUrl,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      kind: 'action-sequence',
+    };
+    manifest[input.templateId] = entry;
+    await saveManifest(manifest);
+    return entry;
+  });
+}
+
+export async function updateVerificationStatus(
+  templateId: string,
+  result: { success: boolean; error?: string }
+): Promise<void> {
+  return withLock(async () => {
+    const manifest = await loadManifest();
+    const entry = manifest[templateId];
+    if (!entry) return;
+    entry.lastVerified = { ...result, timestamp: new Date().toISOString() };
+    await saveManifest(manifest);
   });
 }
 

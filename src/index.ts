@@ -10,7 +10,7 @@ import {
   ScheduleStockCheckShape,
   SendNotificationShape,
 } from './types.js';
-import type { ExtractionResult } from './types.js';
+import type { ExtractionResult, ActionSequence } from './types.js';
 import {
   ensureStorageInitialized,
   loadManifest,
@@ -18,7 +18,7 @@ import {
   findTemplateById,
   findTemplateByUrl,
 } from './storage.js';
-import { initBrowser, closeBrowser, executeExtraction, isBrowserReady } from './engine.js';
+import { initBrowser, closeBrowser, executeExtraction, executeActionSequence, isBrowserReady } from './engine.js';
 import { batchDownload } from './downloader.js';
 import { logExtractionMetric, getExtractionStats } from './metrics.js';
 import { sendNotification } from './notifier.js';
@@ -97,6 +97,19 @@ async function runExtraction(
       return { success: false, error, meta: buildMeta(entry.templateId, entry.domainPattern, '') };
     }
 
+    if (entry.kind === 'action-sequence') {
+      const raw = await fs.readFile(path.resolve(process.cwd(), entry.scriptPath), 'utf8');
+      const sequence = JSON.parse(raw) as ActionSequence;
+      await executeActionSequence({ sequence, proxyUrl, simulateLowBandwidth });
+      await logExtractionMetric(entry.templateId, resolvedUrl, 0);
+      await reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
+      return {
+        success: true,
+        data: { completedSteps: sequence.steps.length },
+        meta: buildMeta(entry.templateId, entry.domainPattern, resolvedUrl),
+      };
+    }
+
     const data = await executeExtraction({
       targetUrl: resolvedUrl,
       scriptPath: entry.scriptPath,
@@ -120,7 +133,7 @@ const scheduler = new Scheduler(async (targetUrl, templateId) => {
   await runExtraction(targetUrl, templateId);
 });
 
-const server = new McpServer({ name: 'APImeMCP', version: '1.0.4' });
+const server = new McpServer({ name: 'APImeMCP', version: '1.1.0' });
 
 server.tool('register_extraction_template', RegisterExtractionTemplateShape, async (input) => {
   await reportProgress({
