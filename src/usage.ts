@@ -45,12 +45,23 @@ import { chromium } from 'playwright';
 
 const TARGET_URL = process.argv[2] || ${JSON.stringify(defaultUrl)};
 
+// AUTH: to run this as a logged-in user, paste your own ${entry.domainPattern} session
+// cookies here as 'name=value; name2=value2' (see the "Authentication" section of this
+// template's docs for how to copy them from your browser). Leave '' for anonymous.
+const COOKIES = '';
+
 // The extraction script that runs inside the page (verbatim from the template).
 const EXTRACTION_SCRIPT = ${JSON.stringify(scriptSource)};
 
 const browser = await chromium.launch({ headless: true });
 try {
   const context = await browser.newContext({ userAgent: ${JSON.stringify(UA)}, viewport: { width: 1280, height: 800 } });
+  if (COOKIES) {
+    await context.addCookies(COOKIES.split(';').map((s) => s.trim()).filter(Boolean).map((pair) => {
+      const i = pair.indexOf('=');
+      return { name: i === -1 ? pair : pair.slice(0, i).trim(), value: i === -1 ? '' : pair.slice(i + 1).trim(), url: TARGET_URL };
+    }));
+  }
   await context.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }); });
   const page = await context.newPage();
   await page.goto(TARGET_URL, { waitUntil: 'networkidle', timeout: 30000 });
@@ -163,11 +174,57 @@ curl -X POST ${HOST}/api/run/${id} \\
   const runCmd = isAction ? `node ${id}.mjs` : needsUrl ? `node ${id}.mjs "${example}"` : `node ${id}.mjs`;
   const watchLine = isAction ? `\nnode ${id}.mjs --watch   # visible browser, watch it run` : '';
 
+  const dom = entry.domainPattern;
+  // A standard, always-present block on running the template as a logged-in user.
+  // You never supply a password - you supply your own session cookies for the site.
+  const howToGet = `Log into \`${dom}\` in your normal browser, press **F12** → **Application** tab
+(Chrome) / **Storage** (Firefox) → **Cookies** → select \`${dom}\`, and copy the
+session cookie(s) formatted as \`name=value; name2=value2\`.`;
+  const authSection = isAction
+    ? `## 3. Authentication — running as a logged-in user
+
+This recorded workflow already carries the session cookies captured for \`${dom}\` when
+it was recorded, so it replays as you. If that session has expired, refresh it:
+
+${howToGet}
+
+Then replace the \`COOKIES = [...]\` array near the top of \`${id}.mjs\` (or re-record the
+workflow). You never store a password — only the session cookie your browser already holds.
+
+> ⚠ Session cookies are live account access. Use only your own accounts, and never share a
+> file that contains them.
+`
+    : `## 3. Authentication — running as a logged-in user
+
+Some \`${dom}\` pages only return data when you're signed in. You never hand this tool a
+password — you give it your own **session cookies** for \`${dom}\` and it replays them.
+
+**Get them (your own account only):** ${howToGet}
+
+**Where to put them:**
+
+- **HTTP API** — add a \`cookieString\` field to the POST body:
+
+  \`\`\`bash
+  curl -X POST ${HOST}/api/run/${id} -H "Content-Type: application/json" \\
+    -d '{${needsUrl ? `"url":"${example}",` : ''}"cookieString":"name=value; name2=value2"}'
+  \`\`\`
+
+- **Standalone script** — set the \`COOKIES\` line near the top of \`${id}.mjs\`:
+
+  \`\`\`js
+  const COOKIES = 'name=value; name2=value2';
+  \`\`\`
+
+> ⚠ Session cookies are live account access. Use only your own accounts, and never share a
+> command or file that contains them.
+`;
+
   // Section 3: the fully self-contained script. Only rendered when we have the script
   // text (i.e. generated with the template's contents in hand); the docs-route fallback
   // that builds from just the manifest entry omits it.
   const standaloneSection = standaloneScript
-    ? `## 3. Standalone script — only needs Playwright (no server, no repo)
+    ? `## 4. Standalone script — only needs Playwright (no server, no repo)
 
 Download [\`${id}.mjs\`](/apis/${id}.mjs) (or copy the full source below), then:
 
@@ -186,7 +243,7 @@ dependency is Playwright.
 ${standaloneScript.trimEnd()}
 \`\`\`
 `
-    : `## 3. One-shot, from a source checkout
+    : `## 4. One-shot, from a source checkout
 
 \`\`\`bash
 node scripts/run.mjs ${id} "${fixed || example}"
@@ -231,6 +288,7 @@ Invoke-RestMethod -Method Post -Uri ${HOST}/api/run/${id} \`
 
 Response is JSON: \`{ success, data?, error?, meta }\`.${isAction ? ' For an action-sequence, `data` is `{ completedSteps }`.' : ' `data` holds the extracted result.'}
 ${watchBlock}
+${authSection}
 ${standaloneSection}
 ---
 
