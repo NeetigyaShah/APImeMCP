@@ -7,6 +7,7 @@ import { loadManifest, registerActionSequenceTemplate, updateVerificationStatus 
 import { RegisterExtractionTemplateShape, ScheduleStockCheckShape, isHttpUrl } from './types.js';
 import type { Manifest, ExtractionResult, ActionStep } from './types.js';
 import { getExtractionStats } from './metrics.js';
+import { buildUsageMarkdown, renderDocsPage, getUsagePath } from './usage.js';
 import { getProgress, reportDashboardStatus } from './progress.js';
 import type { Scheduler, ScheduledJob } from './scheduler.js';
 
@@ -97,7 +98,7 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
               ? `<button class="btn watch-btn" onclick="runTemplate('${entry.templateId}', this, true)" title="Run in a visible browser window so you can watch it">&#128065; Watch</button>`
               : ''
           }
-          <a class="usage-link mono" href="/apis/${entry.templateId}.md" target="_blank" title="Console commands to run this API without the dashboard">usage &#8599;</a>
+          <a class="btn docs-btn" href="/docs/${entry.templateId}" target="_blank" title="How to run this API from the console, without the dashboard">&#128214; Docs</a>
         </div>
         <div class="row-qa">
           <input type="text" class="proxy-input mono" placeholder="QA Proxy URL (e.g., http://user:pass@ip:port)" />
@@ -242,8 +243,8 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
   .watch-btn { border-color: var(--ok); color: var(--ok); flex-shrink: 0; }
   .watch-btn:hover:not(:disabled) { background: var(--ok); color: var(--ink); }
   .watch-btn:disabled { color: var(--ok); }
-  .usage-link { align-self: center; font-size: 0.75rem; color: var(--text-dim); text-decoration: none; white-space: nowrap; }
-  .usage-link:hover { color: var(--phosphor); text-decoration: underline; }
+  .docs-btn { text-decoration: none; flex-shrink: 0; display: inline-flex; align-items: center; }
+  .docs-btn:hover { background: var(--phosphor); color: var(--ink); }
   .result:empty { display: none; }
   .result {
     margin: 0.6rem 0 0; padding: 0.6rem; background: var(--void); border-radius: 2px;
@@ -514,7 +515,7 @@ function templateRowHtml(entry) {
       (entry.kind === 'action-sequence'
         ? '<button class="btn watch-btn" onclick="runTemplate(\\'' + entry.templateId + '\\', this, true)" title="Run in a visible browser window so you can watch it">&#128065; Watch</button>'
         : '') +
-      '<a class="usage-link mono" href="/apis/' + entry.templateId + '.md" target="_blank" title="Console commands to run this API without the dashboard">usage &#8599;</a>' +
+      '<a class="btn docs-btn" href="/docs/' + entry.templateId + '" target="_blank" title="How to run this API from the console, without the dashboard">&#128214; Docs</a>' +
     '</div>' +
     '<div class="row-qa">' +
       '<input type="text" class="proxy-input mono" placeholder="QA Proxy URL (e.g., http://user:pass@ip:port)" />' +
@@ -688,8 +689,31 @@ export function startDashboard(deps: DashboardDeps): void {
   });
 
   app.use('/logs', express.static(LOGS_DIR));
-  // Serve the generated per-template usage guides so the "usage" row link resolves.
+  // Raw markdown guides (plain text) - still handy for curl/download.
   app.use('/apis', express.static(APIS_DIR, { setHeaders: (res) => res.type('text/plain') }));
+
+  // Rendered docs page for one template - the "Docs" button target. Reads the
+  // generated apis/<id>.md (which has the real last-run URL baked in); falls back to
+  // generating from the manifest entry if the file isn't there yet.
+  app.get('/docs/:templateId', async (req, res) => {
+    const { templateId } = req.params;
+    if (!RegisterExtractionTemplateShape.templateId.safeParse(templateId).success) {
+      res.status(400).type('text/plain').send('invalid templateId');
+      return;
+    }
+    let md: string;
+    try {
+      md = await fs.readFile(getUsagePath(templateId), 'utf8');
+    } catch {
+      const entry = (await loadManifest())[templateId];
+      if (!entry) {
+        res.status(404).type('text/plain').send(`No template "${templateId}"`);
+        return;
+      }
+      md = buildUsageMarkdown(entry, entry.fixedTargetUrl);
+    }
+    res.type('html').send(renderDocsPage(templateId, md));
+  });
 
   const httpServer = app.listen(DASHBOARD_PORT, '127.0.0.1', () => {
     deps.log(`Dashboard listening on http://127.0.0.1:${DASHBOARD_PORT}`);

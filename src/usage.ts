@@ -114,3 +114,103 @@ export async function writeUsageReadme(entry: ManifestEntry, exampleUrl?: string
     // swallow - see doc comment
   }
 }
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function inlineMd(s: string): string {
+  // escape first so page content can never inject HTML, then apply a safe inline subset
+  let t = escapeHtml(s);
+  t = t.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
+  t = t.replace(/(^|[^_])_([^_]+)_(?=[^_]|$)/g, '$1<em>$2</em>');
+  return t;
+}
+
+/**
+ * Render the constrained markdown subset that buildUsageMarkdown emits (headings,
+ * fenced code blocks, hr, bold/inline-code/italic, paragraphs) to HTML. Not a general
+ * markdown parser - just enough for the docs page, over content we generate ourselves.
+ */
+export function markdownToHtml(md: string): string {
+  const lines = md.split('\n');
+  const out: string[] = [];
+  let para: string[] = [];
+  const flush = () => {
+    if (para.length) {
+      out.push('<p>' + para.map(inlineMd).join('<br>') + '</p>');
+      para = [];
+    }
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const fence = line.match(/^```(\w*)\s*$/);
+    if (fence) {
+      flush();
+      const code: string[] = [];
+      i++;
+      while (i < lines.length && !/^```\s*$/.test(lines[i])) code.push(lines[i++]);
+      out.push(
+        `<pre class="code"><button class="copy" onclick="copyCode(this)">copy</button><code>${escapeHtml(code.join('\n'))}</code></pre>`
+      );
+      continue;
+    }
+    const h = line.match(/^(#{1,3})\s+(.*)$/);
+    if (h) {
+      flush();
+      out.push(`<h${h[1].length}>${inlineMd(h[2])}</h${h[1].length}>`);
+      continue;
+    }
+    if (/^---\s*$/.test(line)) {
+      flush();
+      out.push('<hr>');
+      continue;
+    }
+    if (/^\s*$/.test(line)) {
+      flush();
+      continue;
+    }
+    para.push(line);
+  }
+  flush();
+  return out.join('\n');
+}
+
+/** A full themed HTML docs page for one template, rendered from its usage markdown. */
+export function renderDocsPage(templateId: string, md: string): string {
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(templateId)} — docs — APImeMCP</title>
+<style>
+  :root { --void:#14100a; --panel:#1e1811; --panel-2:#241d14; --line:#3a2f1f; --phosphor:#ffb627; --ok:#7fd858; --text:#d8c9a8; --text-dim:#7a6a4e; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--void); color:var(--text); font-family:-apple-system,'Segoe UI',system-ui,sans-serif; line-height:1.6; }
+  .chrome { display:flex; align-items:center; gap:.75rem; padding:.6rem 1rem; background:var(--panel-2); border-bottom:1px solid var(--line); font-family:ui-monospace,Consolas,monospace; font-size:.85rem; }
+  .chrome a { color:var(--text-dim); text-decoration:none; }
+  .chrome a:hover { color:var(--phosphor); }
+  .chrome b { color:var(--phosphor); }
+  main { max-width:820px; margin:0 auto; padding:1.5rem 1.2rem 4rem; }
+  h1 { font-size:1.3rem; color:var(--phosphor); font-family:ui-monospace,Consolas,monospace; }
+  h2 { font-size:1rem; color:var(--phosphor); margin-top:1.8rem; border-bottom:1px solid var(--line); padding-bottom:.3rem; }
+  h3 { font-size:.9rem; color:var(--ok); margin-top:1.4rem; }
+  code { font-family:ui-monospace,Consolas,monospace; background:var(--panel-2); padding:.1rem .35rem; border-radius:2px; font-size:.85em; color:var(--text); }
+  pre.code { position:relative; background:#0e0b06; border:1px solid var(--line); border-radius:4px; padding:.85rem 1rem; overflow-x:auto; }
+  pre.code code { background:none; padding:0; color:var(--text); font-size:.82rem; line-height:1.5; white-space:pre; }
+  pre.code .copy { position:absolute; top:.4rem; right:.4rem; background:transparent; border:1px solid var(--line); color:var(--text-dim); font-family:ui-monospace,monospace; font-size:.7rem; padding:.15rem .5rem; border-radius:2px; cursor:pointer; }
+  pre.code .copy:hover { border-color:var(--phosphor); color:var(--phosphor); }
+  hr { border:none; border-top:1px solid var(--line); margin:2rem 0; }
+  a { color:var(--phosphor); }
+</style>
+</head><body>
+<div class="chrome"><a href="/">&larr; dashboard</a> <span>/</span> <b>${escapeHtml(templateId)}</b> <span>docs</span></div>
+<main>${markdownToHtml(md)}</main>
+<script>
+function copyCode(btn){
+  var code = btn.parentElement.querySelector('code').innerText;
+  navigator.clipboard.writeText(code).then(function(){ var o=btn.textContent; btn.textContent='copied'; setTimeout(function(){btn.textContent=o;},1200); });
+}
+</script>
+</body></html>`;
+}
