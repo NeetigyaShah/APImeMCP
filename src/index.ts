@@ -53,7 +53,8 @@ async function runExtraction(
   templateId?: string,
   proxyUrl?: string,
   cookieString?: string,
-  simulateLowBandwidth?: boolean
+  simulateLowBandwidth?: boolean,
+  headful?: boolean
 ): Promise<ExtractionResult> {
   const startedAt = Date.now();
   const buildMeta = (id: string, domainMatched: string, resolvedUrl: string) => ({
@@ -100,7 +101,7 @@ async function runExtraction(
     if (entry.kind === 'action-sequence') {
       const raw = await fs.readFile(path.resolve(process.cwd(), entry.scriptPath), 'utf8');
       const sequence = JSON.parse(raw) as ActionSequence;
-      await executeActionSequence({ sequence, proxyUrl, simulateLowBandwidth });
+      await executeActionSequence({ sequence, proxyUrl, simulateLowBandwidth, headful });
       await logExtractionMetric(entry.templateId, resolvedUrl, 0);
       await reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
       return {
@@ -133,7 +134,7 @@ const scheduler = new Scheduler(async (targetUrl, templateId) => {
   await runExtraction(targetUrl, templateId);
 });
 
-const server = new McpServer({ name: 'APImeMCP', version: '1.1.0' });
+const server = new McpServer({ name: 'APImeMCP', version: '1.1.1' });
 
 server.tool('register_extraction_template', RegisterExtractionTemplateShape, async (input) => {
   await reportProgress({

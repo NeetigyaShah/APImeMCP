@@ -19,7 +19,8 @@ export interface DashboardDeps {
     templateId?: string,
     proxyUrl?: string,
     cookieString?: string,
-    simulateLowBandwidth?: boolean
+    simulateLowBandwidth?: boolean,
+    headful?: boolean
   ) => Promise<ExtractionResult>;
   scheduler: Scheduler;
   isBrowserReady: () => boolean;
@@ -90,6 +91,11 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
               : '<input type="text" class="url-input mono" placeholder="https://example.com/page" />'
           }
           <button class="btn run-btn" onclick="runTemplate('${entry.templateId}', this)">Run</button>
+          ${
+            entry.kind === 'action-sequence'
+              ? `<button class="btn watch-btn" onclick="runTemplate('${entry.templateId}', this, true)" title="Run in a visible browser window so you can watch it">&#128065; Watch</button>`
+              : ''
+          }
         </div>
         <div class="row-qa">
           <input type="text" class="proxy-input mono" placeholder="QA Proxy URL (e.g., http://user:pass@ip:port)" />
@@ -231,6 +237,9 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
   .btn:hover { background: var(--phosphor); color: var(--ink); }
   .btn:disabled { opacity: 0.4; cursor: default; background: none; color: var(--phosphor); }
   .btn:focus-visible { outline: 2px solid var(--phosphor); outline-offset: 2px; }
+  .watch-btn { border-color: var(--ok); color: var(--ok); flex-shrink: 0; }
+  .watch-btn:hover:not(:disabled) { background: var(--ok); color: var(--ink); }
+  .watch-btn:disabled { color: var(--ok); }
   .result:empty { display: none; }
   .result {
     margin: 0.6rem 0 0; padding: 0.6rem; background: var(--void); border-radius: 2px;
@@ -344,7 +353,7 @@ function toggleInfo(btn) {
   panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
 }
 
-async function runTemplate(templateId, btn) {
+async function runTemplate(templateId, btn, headful) {
   const row = btn.closest('.row');
   const isFixedTarget = row.dataset.fixedTarget === '1';
   const urlInput = row.querySelector('.url-input');
@@ -353,21 +362,25 @@ async function runTemplate(templateId, btn) {
   const cookieString = row.querySelector('.cookie-input').value.trim();
   const simulateLowBandwidth = row.querySelector('.bandwidth-cb').checked;
   const result = row.querySelector('.result');
+  const runBtn = row.querySelector('.run-btn');
+  const watchBtn = row.querySelector('.watch-btn');
   if (!isFixedTarget && !url) { result.textContent = 'Enter a URL first'; return; }
-  btn.disabled = true;
-  result.textContent = 'Running...';
+  if (runBtn) runBtn.disabled = true;
+  if (watchBtn) watchBtn.disabled = true;
+  result.textContent = headful ? 'Running - watch the browser window that opens...' : 'Running...';
   try {
     const res = await fetch('/api/run/' + encodeURIComponent(templateId), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, proxyUrl, cookieString, simulateLowBandwidth }),
+      body: JSON.stringify({ url, proxyUrl, cookieString, simulateLowBandwidth, headful: !!headful }),
     });
     const data = await res.json();
     result.textContent = JSON.stringify(data, null, 2);
   } catch (err) {
     result.textContent = 'Request failed: ' + err.message;
   } finally {
-    btn.disabled = false;
+    if (runBtn) runBtn.disabled = false;
+    if (watchBtn) watchBtn.disabled = false;
   }
 }
 
@@ -494,6 +507,9 @@ function templateRowHtml(entry) {
         ? '<span class="mono fixed-url dim">' + entry.fixedTargetUrl + '</span>'
         : '<input type="text" class="url-input mono" placeholder="https://example.com/page" />') +
       '<button class="btn run-btn" onclick="runTemplate(\\'' + entry.templateId + '\\', this)">Run</button>' +
+      (entry.kind === 'action-sequence'
+        ? '<button class="btn watch-btn" onclick="runTemplate(\\'' + entry.templateId + '\\', this, true)" title="Run in a visible browser window so you can watch it">&#128065; Watch</button>'
+        : '') +
     '</div>' +
     '<div class="row-qa">' +
       '<input type="text" class="proxy-input mono" placeholder="QA Proxy URL (e.g., http://user:pass@ip:port)" />' +
@@ -560,6 +576,10 @@ export function startDashboard(deps: DashboardDeps): void {
     const proxyUrl = typeof body.proxyUrl === 'string' && body.proxyUrl ? body.proxyUrl : undefined;
     const cookieString = typeof body.cookieString === 'string' && body.cookieString ? body.cookieString : undefined;
     const simulateLowBandwidth = body.simulateLowBandwidth === true;
+    // Only meaningful for action-sequence (recorded) templates - runExtraction only
+    // forwards this into the action-sequence execution path, so it's a harmless no-op
+    // for extraction templates rather than something that needs rejecting here.
+    const headful = body.headful === true;
 
     if (!RegisterExtractionTemplateShape.templateId.safeParse(templateId).success) {
       res.status(400).json({ success: false, error: 'invalid templateId' });
@@ -570,7 +590,7 @@ export function startDashboard(deps: DashboardDeps): void {
       return;
     }
 
-    const result = await deps.runExtraction(targetUrl, templateId, proxyUrl, cookieString, simulateLowBandwidth);
+    const result = await deps.runExtraction(targetUrl, templateId, proxyUrl, cookieString, simulateLowBandwidth, headful);
     res.json(result);
   });
 

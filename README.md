@@ -196,6 +196,13 @@ registering, and shows up in the dashboard alongside extraction templates with a
 "action-sequence" badge and a pass/fail status dot. See `extension/README.md` for
 how to load it (`chrome://extensions` → Developer mode → Load unpacked).
 
+Action-sequence templates get a second **Watch** button next to Run - it replays the
+same steps but launches a separate, visible browser window instead of using the
+shared headless one, so you can watch it actually click through the recorded steps.
+The window closes itself ~1.5s after finishing. Extraction templates don't get this
+button; watching a `page.evaluate()` scrape execute isn't the point the way watching
+a recorded workflow replay is.
+
 ## Tools
 
 ### `register_extraction_template`

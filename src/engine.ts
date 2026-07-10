@@ -217,10 +217,15 @@ export interface ExecuteActionSequenceOptions {
   sequence: ActionSequence;
   proxyUrl?: string;
   simulateLowBandwidth?: boolean;
+  // Launches a separate, visible browser window just for this one run - the shared
+  // browser instance is always headless (fixed at initBrowser() launch time, can't be
+  // toggled after the fact), so "watch it run" needs its own dedicated instance.
+  headful?: boolean;
 }
 
 export async function executeActionSequence(options: ExecuteActionSequenceOptions): Promise<void> {
-  const browser = getBrowser();
+  const ownBrowser = options.headful ? await chromium.launch({ headless: false }) : undefined;
+  const browser = ownBrowser ?? getBrowser();
   const context = await browser.newContext({
     userAgent: USER_AGENT,
     viewport: VIEWPORT,
@@ -269,6 +274,14 @@ export async function executeActionSequence(options: ExecuteActionSequenceOption
       }
     }
   } finally {
+    if (ownBrowser) {
+      // ponytail: leave the final state on screen for a moment before closing the
+      // window - the whole point of headful mode is watching it happen.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
     await context.close();
+    if (ownBrowser) {
+      await ownBrowser.close();
+    }
   }
 }
