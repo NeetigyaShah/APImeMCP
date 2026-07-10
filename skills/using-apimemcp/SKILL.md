@@ -1,19 +1,30 @@
 ---
 name: using-apimemcp
-description: Use when asked to build a data-extraction API, scraper, downloader, or scheduled monitor for a specific website, or when APImeMCP MCP tools (register_extraction_template, execute_native_extraction, batch_download_assets, schedule_stock_check) are available for the task.
+description: Use when asked to build a data-extraction API, scraper, downloader, scheduled monitor, or record-and-replay browser workflow for a specific website, or when APImeMCP MCP tools (register_extraction_template, execute_native_extraction, save_template_cookies, batch_download_assets, schedule_stock_check) are available for the task.
 ---
 
 # Using APImeMCP
 
 ## Overview
 
-apimemcp is a "compiler pattern" MCP server: you register a small JavaScript
-extraction script once per domain (`register_extraction_template`), then re-run it
-deterministically against matching URLs (`execute_native_extraction`). It runs the
-script inside a real, isolated Playwright/Chromium context via `page.evaluate()` —
-the script can do DOM queries, or just `fetch()` a JSON endpoint directly if one
-exists. It is not limited to DOM scraping; "extraction script" means "any JS that
-returns JSON-serializable data from inside the page."
+apimemcp is a "compiler pattern" MCP server: you register a small piece of logic once
+per domain, then re-run it deterministically. There are two kinds of template:
+
+- **Extraction** (`register_extraction_template` → `execute_native_extraction`): a
+  JavaScript script run inside a real, isolated Playwright/Chromium context via
+  `page.evaluate()`. The script can do DOM queries, or just `fetch()` a JSON endpoint
+  directly if one exists — "extraction script" means "any JS that returns
+  JSON-serializable data from inside the page." Returns the scraped data.
+- **Action-sequence** (created by the recorder Chrome extension, not a tool): a
+  recorded browser workflow — click, fill, navigate, submit — replayed step by step.
+  For *doing* a task (log in, post, submit a form), not scraping. Registered by the
+  extension POSTing to the server's `/api/recordings`; run the same way via
+  `execute_native_extraction` with its `templateId`.
+
+Every registered template is simultaneously three things: an MCP tool call, a plain
+HTTP endpoint (`POST http://127.0.0.1:3000/api/run/<id>`), and a uniquely-named
+standalone script (`apis/<id>.mjs`, only needs Playwright — no server/repo). Each
+also gets an auto-generated console guide (`apis/<id>.md`, rendered at `/docs/<id>`).
 
 ## Before writing any script: check for a real API first
 
@@ -52,15 +63,37 @@ apply the same judgment here you'd apply to writing that code by hand.
 | Tool | Input | Notes |
 |---|---|---|
 | `register_extraction_template` | `templateId` (kebab-case), `domainPattern`, `executableScript`, `fixedTargetUrl?` | Upserts by `templateId`. Multiple templates can share a `domainPattern` (N:1) — always pass explicit `templateId` when more than one template targets the same domain, auto-match-by-URL is only reliable for a domain's single most-recently-registered template. Set `fixedTargetUrl` when the page never varies (see below). |
-| `execute_native_extraction` | `targetUrl?`, `templateId?`, `proxyUrl?` | `targetUrl` is only optional when `templateId` names a template registered with `fixedTargetUrl`. Logs a metric automatically on success. |
-| `batch_download_assets` | `urls: string[]`, `outputDir` | Concurrency-limited (5 at a time). Use this for "download the images" rather than writing your own fetch loop. |
+| `execute_native_extraction` | `targetUrl?`, `templateId?`, `proxyUrl?`, `cookieString?` | Runs an extraction OR an action-sequence template (dispatched by kind). `targetUrl` is only optional for a `fixedTargetUrl` template. `cookieString` (`name=value; name2=value2`) runs it as a logged-in user AND is auto-saved for that template (see below). Logs a metric on success. |
+| `save_template_cookies` | `templateId`, `cookieString` | Persist session cookies for a template **without running it** — use this when the user mentions/shares cookies in chat so they land in the dashboard. |
+| `batch_download_assets` | `urls: string[]`, `outputDir` | Concurrency-limited (5 at a time). Use for "download the images" rather than a hand-rolled fetch loop. |
 | `schedule_stock_check` | `targetUrl`, `cronExpression` (5-field only), `templateId?` | Persists across restarts. |
 | `get_extraction_stats` | none | Totals, recent domains, last run — read this instead of re-deriving from raw files. |
 | `send_notification` | `endpointUrl`, `message` | Generic webhook POST. |
 
+Action-sequence templates are **created by the recorder extension** (it POSTs recorded
+steps + cookies to `/api/recordings`), not by a tool — there's no "register workflow"
+tool. You run them via `execute_native_extraction`.
+
 Resource `status://server` and dashboard `http://127.0.0.1:3000` (if running) expose
 the same data for inspection — check `status://server` before assuming the browser
 isn't ready.
+
+## What this server can do (capabilities)
+
+- **Extraction APIs** — register a per-domain script, run it deterministically; returns JSON.
+- **Recorded workflow replay** — a Chrome extension records real clicks/typing/navigation,
+  compiles them to an action-sequence template that replays headlessly (login, post, submit).
+- **Watch mode** — action-sequence templates can run in a visible browser window
+  (dashboard "Watch" button, or HTTP `{"headful":true}`) so you can see them execute.
+- **Logged-in runs + saved cookies** — supply `cookieString` (via the tool or the
+  dashboard cookie box); it's saved per template, and the dashboard shows a "Use saved
+  cookies" button to re-run without re-pasting.
+- **Batch image download** — `batch_download_assets`, or the standalone script's
+  `--download` flag which saves every image URL in a result to a folder.
+- **Every template is portable** — also reachable as an HTTP endpoint and as a
+  standalone `apis/<id>.mjs` (only needs Playwright), each with a generated docs page
+  at `/docs/<id>`.
+- **Scheduling, metrics, notifications** — cron re-runs, run stats, webhook pings.
 
 ## Templates with no per-run input ("fixed-target")
 
@@ -86,6 +119,10 @@ fixed-target template doesn't need.
 - **Auth/API keys:** this is the one thing you genuinely can't decide yourself —
   if the best path needs a key (e.g., a first-party API that requires one), ask for
   it once, don't substitute scraping to avoid asking.
+- **Cookies mentioned in chat:** when the user shares session cookies for a site,
+  persist them to the relevant template with `save_template_cookies` (or pass
+  `cookieString` when running) so they show up in the dashboard's saved-cookies store
+  — don't use them once and drop them.
 
 ## Verify empirically before committing to a script
 

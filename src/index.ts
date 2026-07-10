@@ -142,7 +142,7 @@ const scheduler = new Scheduler(async (targetUrl, templateId) => {
   await runExtraction(targetUrl, templateId);
 });
 
-const server = new McpServer({ name: 'APImeMCP', version: '1.3.1' });
+const server = new McpServer({ name: 'APImeMCP', version: '1.3.2' });
 
 server.tool('register_extraction_template', RegisterExtractionTemplateShape, async (input) => {
   await reportProgress({
