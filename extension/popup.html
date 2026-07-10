@@ -2,86 +2,124 @@
 <html>
 <head>
 <meta charset="utf-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  body {
-    width: 260px;
-    background: #1e1e24;
-    color: #eee;
-    font-family: system-ui, sans-serif;
-    padding: 12px;
+  :root {
+    --void: #14100a;
+    --panel: #1e1811;
+    --panel-2: #241d14;
+    --line: #3a2f1f;
+    --phosphor: #ffb627;
+    --phosphor-dim: #8a5a1e;
+    --ok: #7fd858;
+    --err: #ff5f56;
+    --text: #d8c9a8;
+    --text-dim: #7a6a4e;
   }
-  h1 {
-    font-size: 14px;
-    margin: 0 0 10px;
-    color: #fff;
+  * { box-sizing: border-box; }
+  body {
+    width: 280px;
+    margin: 0;
+    background: var(--void);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    padding: 0;
+  }
+  .chrome {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.8rem;
+    background: var(--panel-2);
+    border-bottom: 1px solid var(--line);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+  .dot.recording { background: var(--err); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .title { font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; color: var(--phosphor); font-weight: 600; }
+  main { padding: 0.85rem; }
+  #counter {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    margin-bottom: 0.7rem;
   }
   button {
     width: 100%;
-    padding: 8px;
-    margin-bottom: 8px;
-    border: none;
-    border-radius: 4px;
-    font-size: 13px;
+    padding: 0.55rem;
+    margin-bottom: 0.5rem;
+    border-radius: 3px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 600;
     cursor: pointer;
+    border: 1px solid var(--phosphor-dim);
+    background: transparent;
+    color: var(--phosphor);
+    transition: background 0.15s ease, color 0.15s ease;
   }
-  button:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-  #recordBtn {
-    background: #d9534f;
-    color: #fff;
-  }
-  #stopBtn {
-    background: #444;
-    color: #fff;
-  }
-  #saveBtn {
-    background: #4caf50;
-    color: #fff;
-  }
-  #counter {
-    font-size: 12px;
-    color: #bbb;
-    margin-bottom: 10px;
-  }
+  button:hover:not(:disabled) { background: var(--phosphor); color: var(--void); }
+  button:disabled { opacity: 0.35; cursor: default; }
+  #recordBtn { border-color: var(--err); color: var(--err); }
+  #recordBtn:hover:not(:disabled) { background: var(--err); color: var(--void); }
+  #saveBtn { border-color: var(--ok); color: var(--ok); }
+  #saveBtn:hover:not(:disabled) { background: var(--ok); color: var(--void); }
   #nameInput {
     width: 100%;
-    box-sizing: border-box;
-    padding: 6px;
-    margin-bottom: 8px;
-    border-radius: 4px;
-    border: 1px solid #555;
-    background: #2a2a30;
-    color: #eee;
-    font-size: 13px;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
   }
-  #nameSection {
-    display: none;
-  }
+  #nameInput:focus-visible { outline: 2px solid var(--phosphor); outline-offset: 1px; }
+  #nameSection { display: none; }
   #status {
-    font-size: 12px;
-    margin-top: 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    margin-top: 0.4rem;
     word-break: break-word;
+    line-height: 1.4;
   }
-  #status.error {
-    color: #ff8a80;
+  #status.error { color: var(--err); }
+  #status.success { color: var(--ok); }
+  .disclosure {
+    margin-top: 0.75rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.68rem;
+    line-height: 1.5;
+    color: var(--text-dim);
   }
-  #status.success {
-    color: #a5d6a7;
-  }
+  .disclosure b { color: var(--text); }
 </style>
 </head>
 <body>
-  <h1>APImeMCP Recorder</h1>
-  <div id="counter">0 steps captured</div>
-  <button id="recordBtn">Record</button>
-  <button id="stopBtn" disabled>Stop</button>
-  <div id="nameSection">
-    <input id="nameInput" type="text" placeholder="Recording name" />
-    <button id="saveBtn">Save</button>
+  <div class="chrome">
+    <span class="dot" id="statusDot"></span>
+    <span class="title">APImeMCP Recorder</span>
   </div>
-  <div id="status"></div>
+  <main>
+    <div id="counter">0 steps captured</div>
+    <button id="recordBtn">Record</button>
+    <button id="stopBtn" disabled>Stop</button>
+    <div id="nameSection">
+      <input id="nameInput" type="text" placeholder="Recording name" />
+      <button id="saveBtn">Save</button>
+    </div>
+    <div id="status"></div>
+    <div class="disclosure">
+      <b>What this does:</b> when you click Record, it asks Chrome's permission to read
+      data on the current site only, then captures your clicks/typing/navigation there.
+      On Stop, it also reads that site's cookies (to reproduce your session on replay)
+      and sends the steps + cookies to <b>your local APImeMCP server</b>
+      (http://127.0.0.1:3000) &mdash; nothing leaves your machine.
+    </div>
+  </main>
   <script src="popup.js"></script>
 </body>
 </html>

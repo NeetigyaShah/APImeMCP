@@ -43,14 +43,31 @@ async function startRecording() {
   }
 }
 
+async function hasHostPermission(domain) {
+  try {
+    return await chrome.permissions.contains({ origins: [`*://${domain}/*`] });
+  } catch (e) {
+    return false;
+  }
+}
+
 async function getCookiesForDomains(domains) {
   const all = [];
+  const skipped = [];
   for (const domain of domains) {
+    // Only domains the user actually granted access to (via the Record-click prompt,
+    // or a later navigation staying on an already-granted domain) can have their
+    // cookies read - a domain visited mid-recording that we were never granted is
+    // silently skipped here, not silently included.
+    if (!(await hasHostPermission(domain))) {
+      skipped.push(domain);
+      continue;
+    }
     try {
       const cookies = await chrome.cookies.getAll({ domain });
       all.push(...cookies);
     } catch (e) {
-      // ponytail: skip domains that error out
+      skipped.push(domain);
     }
   }
   // de-duplicate by name+domain+path
@@ -63,12 +80,12 @@ async function getCookiesForDomains(domains) {
       deduped.push(c);
     }
   }
-  return deduped;
+  return { cookies: deduped, skipped };
 }
 
 async function stopRecording(name) {
   recording = false;
-  const cookies = await getCookiesForDomains(visitedDomains);
+  const { cookies, skipped } = await getCookiesForDomains(visitedDomains);
 
   let result;
   try {
@@ -78,9 +95,9 @@ async function stopRecording(name) {
       body: JSON.stringify({ name, startUrl, steps, cookies }),
     });
     const json = await res.json();
-    result = { type: 'RECORDING_SAVED', ...json };
+    result = { type: 'RECORDING_SAVED', ...json, cookieDomainsSkipped: skipped };
   } catch (err) {
-    result = { type: 'RECORDING_SAVED', success: false, error: err.message || String(err) };
+    result = { type: 'RECORDING_SAVED', success: false, error: err.message || String(err), cookieDomainsSkipped: skipped };
   }
 
   broadcast(result);
