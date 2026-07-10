@@ -41,6 +41,10 @@ export const ExecuteNativeExtractionShape = {
   targetUrl: z.string().refine(isHttpUrl, { message: 'targetUrl must be an absolute http:// or https:// URL' }).optional(),
   templateId: TemplateIdSchema.optional(),
   proxyUrl: z.string().url().optional(),
+  // Session cookies ("name=value; name2=value2") to run as a logged-in user. When
+  // supplied, they're also saved for this template so the dashboard can offer to reuse
+  // them. Point only at accounts/domains you control.
+  cookieString: z.string().optional(),
 };
 
 export const ExecuteNativeExtractionInputSchema = z.object(ExecuteNativeExtractionShape);

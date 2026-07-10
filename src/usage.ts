@@ -259,6 +259,10 @@ password — you give it your own **session cookies** for \`${dom}\` and it repl
     -d '{${needsUrl ? `"url":"${example}",` : ''}"cookieString":"name=value; name2=value2"}'
   \`\`\`
 
+  Cookies sent this way (or in a chat via \`execute_native_extraction\`) are **saved for
+  this template**, so the dashboard then shows a **🔑 Use saved cookies** button and you
+  don't have to paste them again.
+
 - **Standalone script** — set the \`COOKIES\` line near the top of \`${id}.mjs\`:
 
   \`\`\`js

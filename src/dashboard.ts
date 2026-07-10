@@ -8,6 +8,7 @@ import { RegisterExtractionTemplateShape, ScheduleStockCheckShape, isHttpUrl } f
 import type { Manifest, ExtractionResult, ActionStep } from './types.js';
 import { getExtractionStats } from './metrics.js';
 import { buildUsageMarkdown, renderDocsPage, getUsagePath } from './usage.js';
+import { templatesWithSavedCookies } from './cookie-store.js';
 import { getProgress, reportDashboardStatus } from './progress.js';
 import type { Scheduler, ScheduledJob } from './scheduler.js';
 
@@ -22,7 +23,8 @@ export interface DashboardDeps {
     proxyUrl?: string,
     cookieString?: string,
     simulateLowBandwidth?: boolean,
-    headful?: boolean
+    headful?: boolean,
+    useSavedCookies?: boolean
   ) => Promise<ExtractionResult>;
   scheduler: Scheduler;
   isBrowserReady: () => boolean;
@@ -71,7 +73,7 @@ function cronColumns(expr: string): string[] {
   return parts.slice(0, 5);
 }
 
-function renderDashboard(manifest: Manifest, browserReady: boolean): string {
+function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: Set<string>): string {
   const templates = Object.values(manifest);
 
   const templateRows = templates
@@ -82,6 +84,7 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
           <span class="mono id">${entry.templateId}</span>
           ${entry.fixedTargetUrl ? `<span class="mono fixed-badge" title="${entry.fixedTargetUrl}">&#9733; no input needed</span>` : ''}
           ${entry.kind === 'action-sequence' ? '<span class="mono kind-badge" title="Action-sequence template">&#9881; action-sequence</span>' : ''}
+          ${cookieSet.has(entry.templateId) ? '<span class="mono cookie-badge" title="Session cookies saved for this template">&#128273; cookies saved</span>' : ''}
           ${entry.lastVerified ? `<span class="dot ${entry.lastVerified.success ? 'on' : 'off'}" title="${entry.lastVerified.success ? 'Last verified OK' : (entry.lastVerified.error ?? 'Last verification failed')}"></span>` : ''}
           <span class="mono domain">${entry.domainPattern}</span>
           <span class="mono ts dim">${entry.updatedAt}</span>
@@ -96,6 +99,11 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
           ${
             entry.kind === 'action-sequence'
               ? `<button class="btn watch-btn" onclick="runTemplate('${entry.templateId}', this, true)" title="Run in a visible browser window so you can watch it">&#128065; Watch</button>`
+              : ''
+          }
+          ${
+            cookieSet.has(entry.templateId)
+              ? `<button class="btn cookie-btn" onclick="runTemplate('${entry.templateId}', this, false, true)" title="Run using the session cookies saved for this template">&#128273; Use saved cookies</button>`
               : ''
           }
           <a class="btn docs-btn" href="/docs/${entry.templateId}" target="_blank" title="How to run this API from the console, without the dashboard">&#128214; Docs</a>
@@ -200,6 +208,7 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
   .domain { color: var(--text); }
   .fixed-badge { color: var(--ok); font-size: 0.75rem; }
   .kind-badge { color: var(--text-dim); font-size: 0.75rem; }
+  .cookie-badge { color: var(--ok); font-size: 0.75rem; }
   .fixed-url { flex: 1; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ts { font-size: 0.75rem; margin-left: auto; }
   .row-controls { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
@@ -243,6 +252,8 @@ function renderDashboard(manifest: Manifest, browserReady: boolean): string {
   .watch-btn { border-color: var(--ok); color: var(--ok); flex-shrink: 0; }
   .watch-btn:hover:not(:disabled) { background: var(--ok); color: var(--ink); }
   .watch-btn:disabled { color: var(--ok); }
+  .cookie-btn { border-color: var(--ok); color: var(--ok); flex-shrink: 0; }
+  .cookie-btn:hover:not(:disabled) { background: var(--ok); color: var(--ink); }
   .docs-btn { text-decoration: none; flex-shrink: 0; display: inline-flex; align-items: center; }
   .docs-btn:hover { background: var(--phosphor); color: var(--ink); }
   .result:empty { display: none; }
@@ -358,7 +369,7 @@ function toggleInfo(btn) {
   panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
 }
 
-async function runTemplate(templateId, btn, headful) {
+async function runTemplate(templateId, btn, headful, useSavedCookies) {
   const row = btn.closest('.row');
   const isFixedTarget = row.dataset.fixedTarget === '1';
   const urlInput = row.querySelector('.url-input');
@@ -367,25 +378,25 @@ async function runTemplate(templateId, btn, headful) {
   const cookieString = row.querySelector('.cookie-input').value.trim();
   const simulateLowBandwidth = row.querySelector('.bandwidth-cb').checked;
   const result = row.querySelector('.result');
-  const runBtn = row.querySelector('.run-btn');
-  const watchBtn = row.querySelector('.watch-btn');
+  const btns = row.querySelectorAll('.run-btn, .watch-btn, .cookie-btn');
   if (!isFixedTarget && !url) { result.textContent = 'Enter a URL first'; return; }
-  if (runBtn) runBtn.disabled = true;
-  if (watchBtn) watchBtn.disabled = true;
-  result.textContent = headful ? 'Running - watch the browser window that opens...' : 'Running...';
+  btns.forEach((b) => (b.disabled = true));
+  result.textContent = headful ? 'Running - watch the browser window that opens...'
+    : useSavedCookies ? 'Running with your saved cookies...' : 'Running...';
   try {
     const res = await fetch('/api/run/' + encodeURIComponent(templateId), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, proxyUrl, cookieString, simulateLowBandwidth, headful: !!headful }),
+      body: JSON.stringify({ url, proxyUrl, cookieString, simulateLowBandwidth, headful: !!headful, useSavedCookies: !!useSavedCookies }),
     });
     const data = await res.json();
     result.textContent = JSON.stringify(data, null, 2);
+    // A run may have just saved new cookies (or used them) - refresh so the badge/button appear.
+    if (cookieString) loadTemplates();
   } catch (err) {
     result.textContent = 'Request failed: ' + err.message;
   } finally {
-    if (runBtn) runBtn.disabled = false;
-    if (watchBtn) watchBtn.disabled = false;
+    btns.forEach((b) => (b.disabled = false));
   }
 }
 
@@ -503,6 +514,7 @@ function templateRowHtml(entry) {
       '<span class="mono id">' + entry.templateId + '</span>' +
       (fixed ? '<span class="mono fixed-badge" title="' + entry.fixedTargetUrl + '">&#9733; no input needed</span>' : '') +
       (entry.kind === 'action-sequence' ? '<span class="mono kind-badge" title="Action-sequence template">&#9881; action-sequence</span>' : '') +
+      (entry.hasSavedCookies ? '<span class="mono cookie-badge" title="Session cookies saved for this template">&#128273; cookies saved</span>' : '') +
       (entry.lastVerified ? '<span class="dot ' + (entry.lastVerified.success ? 'on' : 'off') + '" title="' + (entry.lastVerified.success ? 'Last verified OK' : (entry.lastVerified.error || 'Last verification failed')) + '"></span>' : '') +
       '<span class="mono domain">' + entry.domainPattern + '</span>' +
       '<span class="mono ts dim">' + entry.updatedAt + '</span>' +
@@ -514,6 +526,9 @@ function templateRowHtml(entry) {
       '<button class="btn run-btn" onclick="runTemplate(\\'' + entry.templateId + '\\', this)">Run</button>' +
       (entry.kind === 'action-sequence'
         ? '<button class="btn watch-btn" onclick="runTemplate(\\'' + entry.templateId + '\\', this, true)" title="Run in a visible browser window so you can watch it">&#128065; Watch</button>'
+        : '') +
+      (entry.hasSavedCookies
+        ? '<button class="btn cookie-btn" onclick="runTemplate(\\'' + entry.templateId + '\\', this, false, true)" title="Run using the session cookies saved for this template">&#128273; Use saved cookies</button>'
         : '') +
       '<a class="btn docs-btn" href="/docs/' + entry.templateId + '" target="_blank" title="How to run this API from the console, without the dashboard">&#128214; Docs</a>' +
     '</div>' +
@@ -572,7 +587,7 @@ export function startDashboard(deps: DashboardDeps): void {
 
   app.get('/', async (_req, res) => {
     const manifest = await loadManifest();
-    res.type('html').send(renderDashboard(manifest, deps.isBrowserReady()));
+    res.type('html').send(renderDashboard(manifest, deps.isBrowserReady(), await templatesWithSavedCookies()));
   });
 
   app.post('/api/run/:templateId', async (req, res) => {
@@ -586,6 +601,7 @@ export function startDashboard(deps: DashboardDeps): void {
     // forwards this into the action-sequence execution path, so it's a harmless no-op
     // for extraction templates rather than something that needs rejecting here.
     const headful = body.headful === true;
+    const useSavedCookies = body.useSavedCookies === true;
 
     if (!RegisterExtractionTemplateShape.templateId.safeParse(templateId).success) {
       res.status(400).json({ success: false, error: 'invalid templateId' });
@@ -596,7 +612,7 @@ export function startDashboard(deps: DashboardDeps): void {
       return;
     }
 
-    const result = await deps.runExtraction(targetUrl, templateId, proxyUrl, cookieString, simulateLowBandwidth, headful);
+    const result = await deps.runExtraction(targetUrl, templateId, proxyUrl, cookieString, simulateLowBandwidth, headful, useSavedCookies);
     res.json(result);
   });
 
@@ -637,7 +653,8 @@ export function startDashboard(deps: DashboardDeps): void {
   });
 
   app.get('/api/templates', async (_req, res) => {
-    res.json(Object.values(await loadManifest()));
+    const cookieSet = await templatesWithSavedCookies();
+    res.json(Object.values(await loadManifest()).map((e) => ({ ...e, hasSavedCookies: cookieSet.has(e.templateId) })));
   });
 
   // CORS is scoped to just this one route: it's the only endpoint an external

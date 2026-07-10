@@ -19,6 +19,7 @@ import {
   findTemplateByUrl,
 } from './storage.js';
 import { initBrowser, closeBrowser, executeExtraction, executeActionSequence, isBrowserReady } from './engine.js';
+import { saveCookies, getSavedCookies } from './cookie-store.js';
 import { batchDownload } from './downloader.js';
 import { logExtractionMetric, getExtractionStats } from './metrics.js';
 import { sendNotification } from './notifier.js';
@@ -54,7 +55,8 @@ async function runExtraction(
   proxyUrl?: string,
   cookieString?: string,
   simulateLowBandwidth?: boolean,
-  headful?: boolean
+  headful?: boolean,
+  useSavedCookies?: boolean
 ): Promise<ExtractionResult> {
   const startedAt = Date.now();
   const buildMeta = (id: string, domainMatched: string, resolvedUrl: string) => ({
@@ -111,11 +113,16 @@ async function runExtraction(
       };
     }
 
+    // Auto-store any cookies the caller supplied so the dashboard can offer to reuse
+    // them later; if none supplied and the caller asked, fall back to the saved ones.
+    if (cookieString) await saveCookies(entry.templateId, cookieString);
+    const effectiveCookies = cookieString || (useSavedCookies ? await getSavedCookies(entry.templateId) : undefined);
+
     const data = await executeExtraction({
       targetUrl: resolvedUrl,
       scriptPath: entry.scriptPath,
       proxyUrl,
-      cookieString,
+      cookieString: effectiveCookies,
       simulateLowBandwidth,
     });
     const imageCount = Array.isArray(data) ? data.length : data ? 1 : 0;
@@ -134,7 +141,7 @@ const scheduler = new Scheduler(async (targetUrl, templateId) => {
   await runExtraction(targetUrl, templateId);
 });
 
-const server = new McpServer({ name: 'APImeMCP', version: '1.2.2' });
+const server = new McpServer({ name: 'APImeMCP', version: '1.3.0' });
 
 server.tool('register_extraction_template', RegisterExtractionTemplateShape, async (input) => {
   await reportProgress({
@@ -173,7 +180,7 @@ server.tool('register_extraction_template', RegisterExtractionTemplateShape, asy
 });
 
 server.tool('execute_native_extraction', ExecuteNativeExtractionShape, async (input) => {
-  const result = await runExtraction(input.targetUrl, input.templateId, input.proxyUrl);
+  const result = await runExtraction(input.targetUrl, input.templateId, input.proxyUrl, input.cookieString);
   return {
     content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
     isError: !result.success,
