@@ -1,8 +1,10 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { ManifestEntry } from './types.js';
+import type { ManifestEntry, ActionSequence } from './types.js';
 
 const HOST = 'http://127.0.0.1:3000';
+// Kept in lockstep with engine.ts so a standalone script reproduces the server's run.
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 function getApisDir(): string {
   return path.resolve(process.cwd(), 'apis');
@@ -12,12 +14,121 @@ export function getUsagePath(templateId: string): string {
   return path.join(getApisDir(), `${templateId}.md`);
 }
 
+export function getScriptPath(templateId: string): string {
+  return path.join(getApisDir(), `${templateId}.mjs`);
+}
+
+/**
+ * A uniquely-named, fully standalone Node script for one template. The ONLY runtime
+ * dependency is Playwright — it embeds the template's own logic (the extraction script,
+ * or the recorded action steps + cookies) so someone can copy the one file and run it
+ * with no APImeMCP server and no repo. `contents` is the raw template file: JS source
+ * for extraction, the JSON string of an ActionSequence for action-sequence.
+ */
+export function buildStandaloneScript(entry: ManifestEntry, contents: string): string {
+  return entry.kind === 'action-sequence'
+    ? buildStandaloneAction(entry, JSON.parse(contents) as ActionSequence)
+    : buildStandaloneExtraction(entry, contents);
+}
+
+function buildStandaloneExtraction(entry: ManifestEntry, scriptSource: string): string {
+  const id = entry.templateId;
+  const fixed = entry.fixedTargetUrl;
+  const defaultUrl = fixed || `https://${entry.domainPattern}/`;
+  const argHint = fixed ? '' : ` "<a real ${entry.domainPattern} page URL>"`;
+  return `#!/usr/bin/env node
+// ${id}.mjs — standalone extractor for ${entry.domainPattern}.
+// Self-contained: the ONLY dependency is Playwright. No APImeMCP server, no repo.
+//   npm i playwright && npx playwright install chromium
+//   node ${id}.mjs${argHint}
+import { chromium } from 'playwright';
+
+const TARGET_URL = process.argv[2] || ${JSON.stringify(defaultUrl)};
+
+// The extraction script that runs inside the page (verbatim from the template).
+const EXTRACTION_SCRIPT = ${JSON.stringify(scriptSource)};
+
+const browser = await chromium.launch({ headless: true });
+try {
+  const context = await browser.newContext({ userAgent: ${JSON.stringify(UA)}, viewport: { width: 1280, height: 800 } });
+  await context.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }); });
+  const page = await context.newPage();
+  await page.goto(TARGET_URL, { waitUntil: 'networkidle', timeout: 30000 });
+  const result = await page.evaluate((src) => {
+    const value = (0, eval)(src);
+    return typeof value === 'function' ? value() : value;
+  }, EXTRACTION_SCRIPT);
+  console.log(JSON.stringify(result, null, 2));
+} finally {
+  await browser.close();
+}
+`;
+}
+
+function buildStandaloneAction(entry: ManifestEntry, sequence: ActionSequence): string {
+  const id = entry.templateId;
+  const hasCookies = Array.isArray(sequence.cookies) && sequence.cookies.length > 0;
+  const cookieWarning = hasCookies
+    ? '// WARNING: this file embeds session cookies captured at record time. Do NOT share it.\n'
+    : '';
+  return `#!/usr/bin/env node
+// ${id}.mjs — standalone workflow replay for ${entry.domainPattern}.
+// Self-contained: the ONLY dependency is Playwright. No APImeMCP server, no repo.
+//   npm i playwright && npx playwright install chromium
+//   node ${id}.mjs           # headless
+//   node ${id}.mjs --watch   # visible browser so you can watch it
+${cookieWarning}import { chromium } from 'playwright';
+
+const START_URL = ${JSON.stringify(sequence.startUrl)};
+const STEPS = ${JSON.stringify(sequence.steps, null, 2)};
+const COOKIES = ${JSON.stringify(sequence.cookies || [])};
+const HEADFUL = process.argv.includes('--watch');
+const STEP_TIMEOUT = 3000, NAV_TIMEOUT = 30000;
+
+const sameSite = (s) => (s === 'no_restriction' ? 'None' : s === 'strict' ? 'Strict' : s === 'lax' ? 'Lax' : 'Lax');
+
+const browser = await chromium.launch({ headless: !HEADFUL });
+try {
+  const context = await browser.newContext({ userAgent: ${JSON.stringify(UA)}, viewport: { width: 1280, height: 800 } });
+  if (COOKIES.length) {
+    await context.addCookies(COOKIES.map((c) => ({
+      name: String(c.name), value: String(c.value), domain: String(c.domain), path: String(c.path || '/'),
+      secure: !!c.secure, httpOnly: !!c.httpOnly,
+      expires: typeof c.expirationDate === 'number' ? c.expirationDate : -1, sameSite: sameSite(c.sameSite),
+    })));
+  }
+  const page = await context.newPage();
+  await page.goto(START_URL, { waitUntil: 'networkidle', timeout: NAV_TIMEOUT });
+  for (let i = 0; i < STEPS.length; i++) {
+    const step = STEPS[i];
+    if (step.type === 'navigate') { await page.goto(step.url || '', { waitUntil: 'networkidle', timeout: NAV_TIMEOUT }); continue; }
+    if (step.type === 'waitForNavigation') { await page.waitForLoadState('networkidle', { timeout: NAV_TIMEOUT }); continue; }
+    let done = false;
+    for (const sel of step.selectors || []) {
+      try {
+        const loc = page.locator(sel).first();
+        if (step.type === 'click') await loc.click({ timeout: STEP_TIMEOUT });
+        else if (step.type === 'fill') await loc.fill(step.value || '', { timeout: STEP_TIMEOUT });
+        else if (step.type === 'select') await loc.selectOption(step.value || '', { timeout: STEP_TIMEOUT });
+        done = true; break;
+      } catch { /* try next fallback selector */ }
+    }
+    if (!done) throw new Error('step ' + (i + 1) + ' (' + step.type + '): no selector matched: ' + (step.selectors || []).join(', '));
+  }
+  console.log(JSON.stringify({ success: true, completedSteps: STEPS.length }, null, 2));
+} finally {
+  if (HEADFUL) await new Promise((r) => setTimeout(r, 1500));
+  await browser.close();
+}
+`;
+}
+
 /**
  * A per-template "how to run this API from a console, without Claude Code or the
  * dashboard UI" guide. Pure function of the manifest entry (+ an optional real
  * example URL pulled from run history), so it can be regenerated at any time.
  */
-export function buildUsageMarkdown(entry: ManifestEntry, exampleUrl?: string): string {
+export function buildUsageMarkdown(entry: ManifestEntry, exampleUrl?: string, standaloneScript?: string): string {
   const id = entry.templateId;
   const isAction = entry.kind === 'action-sequence';
   const fixed = entry.fixedTargetUrl;
@@ -49,9 +160,40 @@ curl -X POST ${HOST}/api/run/${id} \\
 `
     : '';
 
-  const oneShot = needsUrl
-    ? `node scripts/run.mjs ${id} "${example}"`
-    : `node scripts/run.mjs ${id} "${fixed}"`;
+  const runCmd = isAction ? `node ${id}.mjs` : needsUrl ? `node ${id}.mjs "${example}"` : `node ${id}.mjs`;
+  const watchLine = isAction ? `\nnode ${id}.mjs --watch   # visible browser, watch it run` : '';
+
+  // Section 3: the fully self-contained script. Only rendered when we have the script
+  // text (i.e. generated with the template's contents in hand); the docs-route fallback
+  // that builds from just the manifest entry omits it.
+  const standaloneSection = standaloneScript
+    ? `## 3. Standalone script — only needs Playwright (no server, no repo)
+
+Download [\`${id}.mjs\`](/apis/${id}.mjs) (or copy the full source below), then:
+
+\`\`\`bash
+npm i playwright
+npx playwright install chromium
+${runCmd}${watchLine}
+\`\`\`
+
+It embeds this template's entire logic and prints the JSON to stdout — the only
+dependency is Playwright.
+
+### Full source — save as \`${id}.mjs\`
+
+\`\`\`js
+${standaloneScript.trimEnd()}
+\`\`\`
+`
+    : `## 3. One-shot, from a source checkout
+
+\`\`\`bash
+node scripts/run.mjs ${id} "${fixed || example}"
+\`\`\`
+
+Needs the repo (the \`scripts/\` folder isn't in the npm package).
+`;
 
   return `# API: ${id}
 
@@ -89,27 +231,26 @@ Invoke-RestMethod -Method Post -Uri ${HOST}/api/run/${id} \`
 
 Response is JSON: \`{ success, data?, error?, meta }\`.${isAction ? ' For an action-sequence, `data` is `{ completedSteps }`.' : ' `data` holds the extracted result.'}
 ${watchBlock}
-## 3. One-shot, no server running (from a source checkout only)
-
-\`\`\`bash
-${oneShot}
-\`\`\`
-
-Spawns the server over stdio, runs once, prints the JSON, exits. Needs the repo
-(the \`scripts/\` folder isn't in the npm package).
-
+${standaloneSection}
 ---
 
 _Generated by APImeMCP. Regenerate all of these with \`node scripts/gen-usage.mjs\`._
 `;
 }
 
-/** Best-effort: write the usage guide to apis/<id>.md. Never throws — a README is a
- *  convenience artifact, its failure must not break template registration. */
-export async function writeUsageReadme(entry: ManifestEntry, exampleUrl?: string): Promise<void> {
+/** Best-effort: write both the standalone script (apis/<id>.mjs) and the usage guide
+ *  (apis/<id>.md) with that script inlined. `contents` is the raw template file (JS
+ *  source or ActionSequence JSON). Never throws — these are convenience artifacts,
+ *  their failure must not break template registration. */
+export async function writeUsageReadme(entry: ManifestEntry, exampleUrl?: string, contents?: string): Promise<void> {
   try {
     await fs.mkdir(getApisDir(), { recursive: true });
-    await fs.writeFile(getUsagePath(entry.templateId), buildUsageMarkdown(entry, exampleUrl), 'utf8');
+    let script: string | undefined;
+    if (contents !== undefined) {
+      script = buildStandaloneScript(entry, contents);
+      await fs.writeFile(getScriptPath(entry.templateId), script, 'utf8');
+    }
+    await fs.writeFile(getUsagePath(entry.templateId), buildUsageMarkdown(entry, exampleUrl, script), 'utf8');
   } catch {
     // swallow - see doc comment
   }

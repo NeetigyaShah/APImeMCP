@@ -65,7 +65,7 @@ export async function registerTemplate(input: RegisterExtractionTemplateInput): 
     };
     manifest[input.templateId] = entry;
     await saveManifest(manifest);
-    await writeUsageReadme(entry, entry.fixedTargetUrl);
+    await writeUsageReadme(entry, entry.fixedTargetUrl, input.executableScript);
     return entry;
   });
 }
@@ -94,7 +94,7 @@ export async function registerActionSequenceTemplate(input: {
     };
     manifest[input.templateId] = entry;
     await saveManifest(manifest);
-    await writeUsageReadme(entry, entry.fixedTargetUrl);
+    await writeUsageReadme(entry, entry.fixedTargetUrl, JSON.stringify(input.sequence));
     return entry;
   });
 }

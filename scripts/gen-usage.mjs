@@ -5,7 +5,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildUsageMarkdown } from '../dist/usage.js';
+import { buildUsageMarkdown, buildStandaloneScript } from '../dist/usage.js';
 
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const manifestPath = path.join(root, 'templates', 'manifest.json');
@@ -53,7 +53,16 @@ await fs.mkdir(apisDir, { recursive: true });
 
 const entries = Object.values(manifest);
 for (const entry of entries) {
-  const md = buildUsageMarkdown(entry, lastUrls[entry.templateId] || entry.fixedTargetUrl);
+  // Read the template's own file so the standalone script can embed its real logic.
+  let script;
+  try {
+    const contents = await fs.readFile(path.join(root, entry.scriptPath), 'utf8');
+    script = buildStandaloneScript(entry, contents);
+    await fs.writeFile(path.join(apisDir, `${entry.templateId}.mjs`), script, 'utf8');
+  } catch (e) {
+    console.warn(`skip standalone for ${entry.templateId}: ${e.message}`);
+  }
+  const md = buildUsageMarkdown(entry, lastUrls[entry.templateId] || entry.fixedTargetUrl, script);
   await fs.writeFile(path.join(apisDir, `${entry.templateId}.md`), md, 'utf8');
 }
 

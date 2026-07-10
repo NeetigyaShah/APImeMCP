@@ -68,16 +68,23 @@ curl -X POST http://127.0.0.1:3000/api/run/<templateId> \
   -d '{"url":"https://example.com/page"}'     # omit url for fixed-target / recorded templates: -d '{}'
 ```
 
-Each template gets its own copy-paste guide at `apis/<templateId>.md`, auto-written when
-it's registered and filled in with that template's real last-run URL. Regenerate them
-all (e.g. after registering new ones) with:
+Each template gets two auto-generated artifacts (written on registration, regenerate all
+with `node scripts/gen-usage.mjs`):
 
-```bash
-node scripts/gen-usage.mjs
-```
+- **`apis/<templateId>.md`** — a copy-paste guide, filled in with that template's real
+  last-run URL. The dashboard's per-template rows link to a rendered version (the "Docs"
+  button → `/docs/<templateId>`).
+- **`apis/<templateId>.mjs`** — a uniquely-named, fully **standalone** script that embeds
+  that template's entire logic. Its only dependency is Playwright, so anyone can grab the
+  one file and run it with no APImeMCP server and no repo:
 
-The dashboard's per-template rows link to these guides ("usage ↗"). See `apis/README.md`
-for the index once you've registered at least one template.
+  ```bash
+  npm i playwright && npx playwright install chromium
+  node <templateId>.mjs            # extraction: pass a URL if the template needs one
+  node <templateId>.mjs --watch    # action-sequence: visible browser
+  ```
+
+See `apis/README.md` for the index once you've registered at least one template.
 
 ## Test
 
