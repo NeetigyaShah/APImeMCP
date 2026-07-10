@@ -2,10 +2,10 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
+    --mono: ui-monospace, 'Cascadia Mono', 'Consolas', 'SFMono-Regular', Menlo, monospace;
+    --sans: -apple-system, 'Segoe UI', system-ui, sans-serif;
     --void: #14100a;
     --panel: #1e1811;
     --panel-2: #241d14;
@@ -23,7 +23,7 @@
     margin: 0;
     background: var(--void);
     color: var(--text);
-    font-family: 'IBM Plex Sans', sans-serif;
+    font-family: var(--sans);
     padding: 0;
   }
   .chrome {
@@ -37,10 +37,10 @@
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
   .dot.recording { background: var(--err); animation: pulse 1.4s ease-in-out infinite; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-  .title { font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; color: var(--phosphor); font-weight: 600; }
+  .title { font-family: var(--mono); font-size: 0.8rem; color: var(--phosphor); font-weight: 600; }
   main { padding: 0.85rem; }
   #counter {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--mono);
     font-size: 0.78rem;
     color: var(--text-dim);
     margin-bottom: 0.7rem;
@@ -50,7 +50,7 @@
     padding: 0.55rem;
     margin-bottom: 0.5rem;
     border-radius: 3px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--mono);
     font-size: 0.8rem;
     font-weight: 600;
     cursor: pointer;
@@ -73,13 +73,13 @@
     border: 1px solid var(--line);
     background: var(--panel);
     color: var(--text);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--mono);
     font-size: 0.78rem;
   }
   #nameInput:focus-visible { outline: 2px solid var(--phosphor); outline-offset: 1px; }
   #nameSection { display: none; }
   #status {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--mono);
     font-size: 0.72rem;
     margin-top: 0.4rem;
     word-break: break-word;
