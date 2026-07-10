@@ -40,10 +40,14 @@ function buildStandaloneExtraction(entry: ManifestEntry, scriptSource: string): 
 // ${id}.mjs — standalone extractor for ${entry.domainPattern}.
 // Self-contained: the ONLY dependency is Playwright. No APImeMCP server, no repo.
 //   npm i playwright && npx playwright install chromium
-//   node ${id}.mjs${argHint}
+//   node ${id}.mjs${argHint}                # print the JSON
+//   node ${id}.mjs${argHint} --download     # also download every image to ./${id}-images/
 import { chromium } from 'playwright';
 
-const TARGET_URL = process.argv[2] || ${JSON.stringify(defaultUrl)};
+const ARGS = process.argv.slice(2);
+const DOWNLOAD = ARGS.includes('--download');
+const IMAGES_DIR = ${JSON.stringify('./' + id + '-images')};
+const TARGET_URL = ARGS.find((a) => !a.startsWith('--')) || ${JSON.stringify(defaultUrl)};
 
 // AUTH: to run this as a logged-in user, paste your own ${entry.domainPattern} session
 // cookies here as 'name=value; name2=value2' (see the "Authentication" section of this
@@ -70,8 +74,52 @@ try {
     return typeof value === 'function' ? value() : value;
   }, EXTRACTION_SCRIPT);
   console.log(JSON.stringify(result, null, 2));
+  if (DOWNLOAD) await downloadImages(collectImageUrls(result), IMAGES_DIR);
 } finally {
   await browser.close();
+}
+
+// Walk the extracted JSON and collect every image URL (by file extension, or by a
+// key that looks image-y like imageUrl/photo/avatar) so --download works whatever
+// this template's field names are.
+function collectImageUrls(data) {
+  const urls = new Set();
+  const IMG_EXT = /\\.(jpe?g|png|webp|gif|avif|svg)(\\?|#|$)/i;
+  const IMG_KEY = /(image|img|photo|thumb|thumbnail|avatar|picture|banner|cover)/i;
+  (function walk(v, key) {
+    if (typeof v === 'string') {
+      if (/^https?:\\/\\//i.test(v) && (IMG_EXT.test(v) || (key && IMG_KEY.test(key)))) urls.add(v);
+    } else if (Array.isArray(v)) {
+      for (const x of v) walk(x, key);
+    } else if (v && typeof v === 'object') {
+      for (const [k, val] of Object.entries(v)) walk(val, k);
+    }
+  })(data, '');
+  return [...urls];
+}
+
+// Download all URLs to a folder, 5 at a time, using Node's built-in fetch (no deps).
+async function downloadImages(urls, dir) {
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  if (!urls.length) { console.error('No image URLs found in the result.'); return; }
+  await mkdir(dir, { recursive: true });
+  let cursor = 0, done = 0, failed = 0;
+  async function worker() {
+    while (cursor < urls.length) {
+      const idx = cursor++;
+      try {
+        const res = await fetch(urls[idx]);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        let base = decodeURIComponent(new URL(urls[idx]).pathname.split('/').pop() || 'image');
+        if (!/\\.\\w{2,5}$/.test(base)) base += '.img';
+        await writeFile(join(dir, String(idx).padStart(4, '0') + '-' + base), Buffer.from(await res.arrayBuffer()));
+        done++;
+      } catch { failed++; }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(5, urls.length) }, worker));
+  console.error('Downloaded ' + done + ' image(s) to ' + dir + (failed ? ' (' + failed + ' failed)' : ''));
 }
 `;
 }
@@ -173,6 +221,7 @@ curl -X POST ${HOST}/api/run/${id} \\
 
   const runCmd = isAction ? `node ${id}.mjs` : needsUrl ? `node ${id}.mjs "${example}"` : `node ${id}.mjs`;
   const watchLine = isAction ? `\nnode ${id}.mjs --watch   # visible browser, watch it run` : '';
+  const downloadLine = isAction ? '' : `\n${runCmd} --download   # ...and download every image in the result to ./${id}-images/`;
 
   const dom = entry.domainPattern;
   // A standard, always-present block on running the template as a logged-in user.
@@ -231,11 +280,15 @@ Download [\`${id}.mjs\`](/apis/${id}.mjs) (or copy the full source below), then:
 \`\`\`bash
 npm i playwright
 npx playwright install chromium
-${runCmd}${watchLine}
+${runCmd}${watchLine}${downloadLine}
 \`\`\`
 
 It embeds this template's entire logic and prints the JSON to stdout — the only
-dependency is Playwright.
+dependency is Playwright.${isAction ? '' : `
+
+**Download the images too:** add \`--download\` and every image URL found in the
+result (product photos, thumbnails, etc.) is saved to \`./${id}-images/\`, 5 at a
+time, using Node's built-in fetch — no extra dependency.`}
 
 ### Full source — save as \`${id}.mjs\`
 
