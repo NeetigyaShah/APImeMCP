@@ -333,6 +333,21 @@ or `{ success: false, error }` if the endpoint didn't respond with a 2xx status.
 Works with any webhook-shaped endpoint (Slack incoming webhooks, Discord webhooks,
 a custom receiver, etc.) — the payload is generic JSON, not platform-specific.
 
+### `save_template_cookies`
+
+Persist session cookies for a template so the dashboard can reuse them — without
+running an extraction.
+
+| field | type | notes |
+|---|---|---|
+| `templateId` | string | the template the cookies belong to |
+| `cookieString` | string | `name=value; name2=value2` session cookies |
+
+Saves to `templates/saved-cookies.json`. The dashboard then shows a **🔑 cookies
+saved** badge and a **🔑 Use saved cookies** button on that template's row. Cookies
+also passed via `execute_native_extraction`'s `cookieString` are saved the same way
+automatically. Own accounts/domains only — these are live session credentials.
+
 ## Prompts
 
 ### `get_environment_context`

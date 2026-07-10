@@ -9,6 +9,7 @@ import {
   BatchDownloadShape,
   ScheduleStockCheckShape,
   SendNotificationShape,
+  SaveTemplateCookiesShape,
 } from './types.js';
 import type { ExtractionResult, ActionSequence } from './types.js';
 import {
@@ -141,7 +142,7 @@ const scheduler = new Scheduler(async (targetUrl, templateId) => {
   await runExtraction(targetUrl, templateId);
 });
 
-const server = new McpServer({ name: 'APImeMCP', version: '1.3.0' });
+const server = new McpServer({ name: 'APImeMCP', version: '1.3.1' });
 
 server.tool('register_extraction_template', RegisterExtractionTemplateShape, async (input) => {
   await reportProgress({
@@ -185,6 +186,30 @@ server.tool('execute_native_extraction', ExecuteNativeExtractionShape, async (in
     content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
     isError: !result.success,
   };
+});
+
+// Persist session cookies for a template WITHOUT running it, so a cookie mentioned in a
+// chat lands in the dashboard's saved-cookies store (badge + "Use saved cookies" button).
+server.tool('save_template_cookies', SaveTemplateCookiesShape, async (input) => {
+  try {
+    await saveCookies(input.templateId, input.cookieString);
+    log(`Saved cookies for template "${input.templateId}"`);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify({ success: true, templateId: input.templateId, savedForDashboard: true }, null, 2),
+        },
+      ],
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logError(`save_template_cookies failed: ${message}`);
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: message }) }],
+      isError: true,
+    };
+  }
 });
 
 server.tool('schedule_stock_check', ScheduleStockCheckShape, async (input) => {

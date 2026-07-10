@@ -83,6 +83,14 @@ export const SendNotificationShape = {
 export const SendNotificationInputSchema = z.object(SendNotificationShape);
 export type SendNotificationInput = z.infer<typeof SendNotificationInputSchema>;
 
+export const SaveTemplateCookiesShape = {
+  templateId: TemplateIdSchema,
+  cookieString: z.string().min(1, 'cookieString must not be empty'),
+};
+
+export const SaveTemplateCookiesInputSchema = z.object(SaveTemplateCookiesShape);
+export type SaveTemplateCookiesInput = z.infer<typeof SaveTemplateCookiesInputSchema>;
+
 export interface ActionStep {
   type: 'click' | 'fill' | 'select' | 'navigate' | 'waitForNavigation';
   selectors?: string[]; // ordered fallback candidates, e.g. ["[data-testid=submit]", "button:has-text('Submit')"]
