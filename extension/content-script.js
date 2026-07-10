@@ -52,16 +52,7 @@ if (window.__apimemcpRecorderInjected) {
   }
 
   function buildSelectors(el) {
-    const selectors = [];
-    const a = attrSelector(el);
-    if (a) selectors.push(a);
-    const b = idSelector(el);
-    if (b) selectors.push(b);
-    const c = textSelector(el);
-    if (c) selectors.push(c);
-    const d = positionalSelector(el);
-    if (d) selectors.push(d);
-    return selectors;
+    return [attrSelector(el), idSelector(el), textSelector(el), positionalSelector(el)].filter(Boolean);
   }
 
   function send(step) {

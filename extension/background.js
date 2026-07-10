@@ -70,16 +70,8 @@ async function getCookiesForDomains(domains) {
       skipped.push(domain);
     }
   }
-  // de-duplicate by name+domain+path
-  const seen = new Set();
-  const deduped = [];
-  for (const c of all) {
-    const key = `${c.name}|${c.domain}|${c.path}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      deduped.push(c);
-    }
-  }
+  // de-duplicate by name+domain+path (last write wins, which is fine - same key = same cookie)
+  const deduped = [...new Map(all.map((c) => [`${c.name}|${c.domain}|${c.path}`, c])).values()];
   return { cookies: deduped, skipped };
 }
 
