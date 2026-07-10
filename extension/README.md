@@ -2,6 +2,16 @@
 
 A Chrome MV3 extension that records your clicks, typing, and navigation in a normal browser tab, then sends the recording to a local APImeMCP server to be saved and replayed as an action-sequence template.
 
+## While recording
+
+The toolbar popup closes the instant you click anywhere on the page - that's normal
+browser behavior for extension popups, not a bug, but it means the popup alone can't
+show live progress while you're actually interacting with the page. Instead, clicking
+Record injects a small floating panel directly onto the page (bottom-right corner)
+showing the live step count and its own **Stop & Save** button, so you never need to
+reopen the toolbar popup mid-recording - just watch the panel and click Stop there
+when you're done.
+
 ## Load it
 
 1. Go to `chrome://extensions`

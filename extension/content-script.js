@@ -72,6 +72,101 @@ if (window.__apimemcpRecorderInjected) {
     }
   }
 
+  // On-page HUD: the extension's toolbar popup closes the instant you click
+  // anywhere on the page (standard browser behavior for action popups), so it
+  // can't show live progress while you're actually interacting. This floating
+  // panel lives in the page itself instead, and survives that.
+  function createHud() {
+    const host = document.createElement('div');
+    host.id = '__apimemcp_hud_host';
+    host.style.cssText = 'all:initial;position:fixed;bottom:16px;right:16px;z-index:2147483647;';
+    const root = host.attachShadow({ mode: 'open' });
+    root.innerHTML = `
+      <style>
+        .panel {
+          font-family: ui-monospace, Consolas, Menlo, monospace;
+          font-size: 12px;
+          width: 240px;
+          background: #14100a;
+          color: #d8c9a8;
+          border: 1px solid #3a2f1f;
+          border-radius: 6px;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+          overflow: hidden;
+        }
+        .bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; background: #241d14; border-bottom: 1px solid #3a2f1f; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: #ff5f56; animation: pulse 1.4s ease-in-out infinite; flex-shrink: 0; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+        .title { font-weight: 600; color: #ffb627; }
+        .body { padding: 8px 10px; }
+        .count { color: #7a6a4e; margin-bottom: 6px; }
+        input {
+          width: 100%; box-sizing: border-box; padding: 5px 6px; margin-bottom: 6px;
+          border-radius: 3px; border: 1px solid #3a2f1f; background: #1e1811; color: #d8c9a8;
+          font-family: inherit; font-size: 11px;
+        }
+        button {
+          width: 100%; padding: 6px; border-radius: 3px; cursor: pointer;
+          border: 1px solid #7fd858; background: transparent; color: #7fd858;
+          font-family: inherit; font-size: 11px; font-weight: 600;
+        }
+        button:hover { background: #7fd858; color: #14100a; }
+        .status { margin-top: 6px; color: #7fd858; }
+        .status.error { color: #ff5f56; }
+      </style>
+      <div class="panel">
+        <div class="bar"><span class="dot"></span><span class="title">APImeMCP Recorder</span></div>
+        <div class="body">
+          <div class="count" id="count">0 steps captured</div>
+          <input id="name" type="text" placeholder="Recording name (optional)" />
+          <button id="stop">Stop &amp; Save</button>
+          <div class="status" id="status"></div>
+        </div>
+      </div>
+    `;
+    document.documentElement.appendChild(host);
+
+    const countEl = root.getElementById('count');
+    const nameEl = root.getElementById('name');
+    const statusEl = root.getElementById('status');
+    const stopBtn = root.getElementById('stop');
+
+    stopBtn.addEventListener('click', () => {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const name = nameEl.value.trim() || `recording-${timestamp}`;
+      stopBtn.disabled = true;
+      statusEl.textContent = 'Saving...';
+      statusEl.className = 'status';
+      chrome.runtime.sendMessage({ type: 'STOP_RECORDING', name });
+    });
+
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.type === 'STEP_COUNT_UPDATE') {
+        countEl.textContent = `${message.count} step${message.count === 1 ? '' : 's'} captured`;
+      } else if (message.type === 'RECORDING_SAVED') {
+        if (message.success) {
+          statusEl.textContent = `Saved (templateId: ${message.templateId})`;
+          statusEl.className = 'status';
+          setTimeout(() => host.remove(), 2500);
+        } else {
+          statusEl.textContent = message.error || 'Save failed.';
+          statusEl.className = 'status error';
+          stopBtn.disabled = false;
+        }
+      }
+    });
+
+    // Re-injected after a navigation mid-recording - sync the real count from
+    // background instead of starting back at 0.
+    chrome.runtime.sendMessage({ type: 'GET_STATE' }, (response) => {
+      if (response && typeof response.stepCount === 'number') {
+        countEl.textContent = `${response.stepCount} step${response.stepCount === 1 ? '' : 's'} captured`;
+      }
+    });
+  }
+
+  createHud();
+
   document.addEventListener(
     'click',
     (event) => {

@@ -115,9 +115,12 @@
     <div class="disclosure">
       <b>What this does:</b> when you click Record, it asks Chrome's permission to read
       data on the current site only, then captures your clicks/typing/navigation there.
-      On Stop, it also reads that site's cookies (to reproduce your session on replay)
-      and sends the steps + cookies to <b>your local APImeMCP server</b>
-      (http://127.0.0.1:3000) &mdash; nothing leaves your machine.
+      A small floating panel appears on the page itself (this popup closes as soon as you
+      click elsewhere - that's normal browser behavior) so you can watch step count and
+      Stop &amp; Save without reopening this popup. On Stop, it also reads that site's
+      cookies (to reproduce your session on replay) and sends everything to
+      <b>your local APImeMCP server</b> (http://127.0.0.1:3000) &mdash; nothing leaves
+      your machine.
     </div>
   </main>
   <script src="popup.js"></script>
