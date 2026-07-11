@@ -244,8 +244,15 @@ Save a reusable extraction script for a domain.
 | `domainPattern` | string | e.g. `amazon.com` — matches that hostname and its subdomains |
 | `executableScript` | string | vanilla JavaScript, evaluated via `page.evaluate()`; must return a JSON-serializable value; capped at 100KB |
 | `fixedTargetUrl` | string, optional | for a template that always targets the same page (e.g. "today's deals") — set this and `execute_native_extraction` can omit `targetUrl` entirely. Marked with a ★ badge in the dashboard. |
+| `waitStrategy` | `'domcontentloaded'\|'load'\|'networkidle'`, optional | how long to wait after navigation before running the script. Omit it and new templates default to the fast `domcontentloaded`; templates registered before this field existed were migrated to explicit `networkidle` (their original behavior) so nothing broke retroactively. Set `networkidle` explicitly if a page populates its data asynchronously after the initial HTML loads (e.g. a paginated grid) and `readySelector` isn't a better fit. |
+| `readySelector` | string, optional | wait for this selector to appear before running the script — a more precise alternative to `networkidle` when you know exactly what element indicates "the data is ready." |
 
-Returns the saved `{ templateId, domainPattern, scriptPath, fixedTargetUrl?, createdAt, updatedAt }`.
+Returns the saved `{ templateId, domainPattern, scriptPath, fixedTargetUrl?, waitStrategy?, readySelector?, createdAt, updatedAt }`.
+Re-registering an existing `templateId` with the same script but a new `waitStrategy`/`readySelector` updates just that setting (upsert semantics).
+
+By default, `execute_native_extraction` also blocks images/media/fonts/CSS for extraction
+templates (not for recorded/action-sequence ones) to speed up runs — pass
+`simulateLowBandwidth: false` explicitly to disable this for one call.
 
 ### `execute_native_extraction`
 

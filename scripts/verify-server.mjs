@@ -34,8 +34,13 @@ async function main() {
     const tools = await client.listTools();
     const toolNames = tools.tools.map((t) => t.name).sort();
     console.log('Tools:', toolNames);
-    if (JSON.stringify(toolNames) !== JSON.stringify(['execute_native_extraction', 'register_extraction_template'])) {
-      throw new Error('Unexpected tool list');
+    // Subset check, not exact-match: new tools get added over time, and an exact-match
+    // assertion re-breaks (falsely) on every single addition. This asserts the tools this
+    // smoke test actually exercises are present - not that nothing else may exist.
+    const expectedCoreTools = ['execute_native_extraction', 'register_extraction_template'];
+    const missing = expectedCoreTools.filter((t) => !toolNames.includes(t));
+    if (missing.length) {
+      throw new Error(`Missing expected tool(s): ${missing.join(', ')} (got: ${toolNames.join(', ')})`);
     }
 
     const registerResult = await client.callTool({

@@ -4,7 +4,9 @@ import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { ActionSequence, ActionStep } from './types.js';
+import type { ActionSequence, ActionStep, WaitStrategy } from './types.js';
+
+const DEFAULT_WAIT_STRATEGY: WaitStrategy = 'domcontentloaded';
 
 // Inject stealth plugin globally into the chromium instance
 chromium.use(stealthPlugin());
@@ -101,6 +103,11 @@ export interface ExecuteExtractionOptions {
   // only at domains/accounts you control.
   cookieString?: string;
   simulateLowBandwidth?: boolean;
+  // Falls back to DEFAULT_WAIT_STRATEGY when absent - see the field comment on
+  // ManifestEntry.waitStrategy in types.ts for why 'networkidle' stopped being the
+  // hardcoded default.
+  waitStrategy?: WaitStrategy;
+  readySelector?: string;
 }
 
 export async function executeExtraction(options: ExecuteExtractionOptions): Promise<unknown> {
@@ -131,7 +138,13 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
     });
     const page = await context.newPage();
     try {
-      await page.goto(options.targetUrl, { timeout: NAVIGATION_TIMEOUT_MS, waitUntil: 'networkidle' });
+      await page.goto(options.targetUrl, {
+        timeout: NAVIGATION_TIMEOUT_MS,
+        waitUntil: options.waitStrategy ?? DEFAULT_WAIT_STRATEGY,
+      });
+      if (options.readySelector) {
+        await page.waitForSelector(options.readySelector, { timeout: NAVIGATION_TIMEOUT_MS });
+      }
       const script = await fs.readFile(path.resolve(process.cwd(), options.scriptPath), 'utf8');
       // ponytail: page.evaluate(stringExpression) does NOT auto-invoke a bare function
       // expression (verified live: `page.evaluate('() => 42')` returns undefined, not 42) -

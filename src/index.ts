@@ -124,7 +124,14 @@ async function runExtraction(
       scriptPath: entry.scriptPath,
       proxyUrl,
       cookieString: effectiveCookies,
-      simulateLowBandwidth,
+      // Extraction is pure data, no visual dependency - block images/media/fonts/CSS by
+      // default to cut load time, unless the caller explicitly asked otherwise. (Only
+      // reached for non-action-sequence templates - see the early-return above - so no
+      // kind check needed here; action-sequence's own simulateLowBandwidth stays
+      // caller-controlled with no implicit default, since layout matters for selectors.)
+      simulateLowBandwidth: simulateLowBandwidth ?? true,
+      waitStrategy: entry.waitStrategy,
+      readySelector: entry.readySelector,
     });
     const imageCount = Array.isArray(data) ? data.length : data ? 1 : 0;
     await logExtractionMetric(entry.templateId, resolvedUrl, imageCount);
@@ -142,7 +149,7 @@ const scheduler = new Scheduler(async (targetUrl, templateId) => {
   await runExtraction(targetUrl, templateId);
 });
 
-const server = new McpServer({ name: 'APImeMCP', version: '1.3.2' });
+const server = new McpServer({ name: 'APImeMCP', version: '1.4.0' });
 
 server.tool('register_extraction_template', RegisterExtractionTemplateShape, async (input) => {
   await reportProgress({

@@ -8,7 +8,7 @@ import { RegisterExtractionTemplateShape, ScheduleStockCheckShape, isHttpUrl } f
 import type { Manifest, ExtractionResult, ActionStep } from './types.js';
 import { getExtractionStats } from './metrics.js';
 import { buildUsageMarkdown, renderDocsPage, getUsagePath } from './usage.js';
-import { templatesWithSavedCookies } from './cookie-store.js';
+import { templatesWithSavedCookies, saveCookies } from './cookie-store.js';
 import { getProgress, reportDashboardStatus } from './progress.js';
 import type { Scheduler, ScheduledJob } from './scheduler.js';
 
@@ -65,6 +65,51 @@ function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
   return slug || `recording-${randomBytes(3).toString('hex')}`;
+}
+
+function cookiesToString(cookies: Array<Record<string, unknown>>): string {
+  return cookies
+    .filter((c) => c && c.name != null && c.value != null)
+    .map((c) => `${c.name}=${c.value}`)
+    .join('; ');
+}
+
+/**
+ * The recorder extension already collects session cookies for the domain it just
+ * recorded on (see extension/background.js's stopRecording()). Previously those
+ * cookies were only ever attached to the new action-sequence template - an
+ * already-registered EXTRACTION template on the same domain got no benefit; the
+ * user had to separately call save_template_cookies by hand. This bridges the gap:
+ * any extraction-kind template whose domainPattern matches the recording's domain
+ * (exact host or suffix, same convention as findTemplateByUrl) gets the same cookies
+ * saved automatically. Deliberately does NOT reuse findTemplateByUrl's single-"best"-
+ * match logic - that picks one entry via a longest-pattern/most-recent tiebreak, and
+ * the action-sequence template just registered would usually win that tiebreak (it's
+ * the freshest). This bridges to every matching extraction template (there can be
+ * more than one per domain - N:1 is a supported pattern), not just one.
+ */
+async function bridgeCookiesToExtractionTemplates(
+  startUrl: string,
+  cookies: Array<Record<string, unknown>>
+): Promise<string[]> {
+  const cookieString = cookiesToString(cookies);
+  if (!cookieString) return [];
+  let hostname: string;
+  try {
+    hostname = new URL(startUrl).hostname.toLowerCase();
+  } catch {
+    return [];
+  }
+  const manifest = await loadManifest();
+  const bridgedTo: string[] = [];
+  for (const entry of Object.values(manifest)) {
+    if (entry.kind === 'action-sequence') continue;
+    const pattern = entry.domainPattern;
+    if (hostname !== pattern && !hostname.endsWith(`.${pattern}`)) continue;
+    await saveCookies(entry.templateId, cookieString);
+    bridgedTo.push(entry.templateId);
+  }
+  return bridgedTo;
 }
 
 function cronColumns(expr: string): string[] {
@@ -690,15 +735,26 @@ export function startDashboard(deps: DashboardDeps): void {
       }
 
       const templateId = slugify(name);
+      const rawCookies = Array.isArray(body.cookies) ? body.cookies : [];
       await registerActionSequenceTemplate({
         templateId,
-        sequence: { startUrl, steps, cookies: Array.isArray(body.cookies) ? body.cookies : undefined },
+        sequence: { startUrl, steps, cookies: rawCookies.length ? rawCookies : undefined },
       });
 
       const result = await deps.runExtraction(startUrl, templateId);
       await updateVerificationStatus(templateId, { success: result.success, error: result.error });
 
-      res.json({ success: true, templateId, verified: result.success, error: result.success ? undefined : result.error });
+      // Also hand these cookies to any existing extraction-kind template on the same
+      // domain, so recording a workflow "primes" that template's saved cookies too.
+      const cookiesBridgedTo = rawCookies.length ? await bridgeCookiesToExtractionTemplates(startUrl, rawCookies) : [];
+
+      res.json({
+        success: true,
+        templateId,
+        verified: result.success,
+        error: result.success ? undefined : result.error,
+        cookiesBridgedTo,
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ success: false, error: message });

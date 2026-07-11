@@ -60,6 +60,8 @@ export async function registerTemplate(input: RegisterExtractionTemplateInput): 
       domainPattern: input.domainPattern,
       scriptPath: path.join('templates', scriptFileName),
       ...(input.fixedTargetUrl ? { fixedTargetUrl: input.fixedTargetUrl } : {}),
+      ...(input.waitStrategy ? { waitStrategy: input.waitStrategy } : {}),
+      ...(input.readySelector ? { readySelector: input.readySelector } : {}),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };

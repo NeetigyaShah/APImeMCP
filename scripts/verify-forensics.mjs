@@ -7,7 +7,10 @@ const THROWING_SCRIPT_PATH = 'scripts/_forensics-throwing-script.js';
 
 await writeFile(THROWING_SCRIPT_PATH, "(() => { throw new Error('intentional test failure'); })()");
 
-await rm('output/logs', { recursive: true, force: true });
+// ponytail: don't rm -rf the shared output/logs dir - it can hold real forensic
+// captures from actual template failures. Snapshot what's there now, then only
+// look at (and clean up) files that are new after this run.
+const filesBefore = new Set(await readdir('output/logs').catch(() => []));
 
 const server = http.createServer((_req, res) => {
   res.setHeader('Content-Type', 'text/html');
@@ -23,16 +26,19 @@ try {
   process.exitCode = 1;
 } catch (err) {
   const hasArtifactPaths = /forensic artifacts: (.+), (.+)\)$/.test(err.message);
-  const files = await readdir('output/logs').catch(() => []);
-  const hasScreenshot = files.some((f) => f.endsWith('-screenshot.png'));
-  const hasDomDump = files.some((f) => f.endsWith('-dom.html'));
+  const allFiles = await readdir('output/logs').catch(() => []);
+  const newFiles = allFiles.filter((f) => !filesBefore.has(f));
+  const hasScreenshot = newFiles.some((f) => f.endsWith('-screenshot.png'));
+  const hasDomDump = newFiles.some((f) => f.endsWith('-dom.html'));
   console.log('Error message:', err.message);
   console.log('Message contains forensic artifact paths:', hasArtifactPaths);
-  console.log('output/logs/ contains a screenshot:', hasScreenshot);
-  console.log('output/logs/ contains a DOM dump:', hasDomDump);
+  console.log('output/logs/ gained a screenshot:', hasScreenshot);
+  console.log('output/logs/ gained a DOM dump:', hasDomDump);
   const ok = hasArtifactPaths && hasScreenshot && hasDomDump;
   console.log(ok ? 'PASS' : 'FAIL');
   process.exitCode = ok ? 0 : 1;
+  // Clean up only the files this run itself created - never touch pre-existing ones.
+  await Promise.all(newFiles.map((f) => rm(`output/logs/${f}`, { force: true })));
 } finally {
   await closeBrowser();
   server.close();

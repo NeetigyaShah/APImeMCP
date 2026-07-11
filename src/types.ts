@@ -20,6 +20,9 @@ export function isHttpUrl(value: string): boolean {
   }
 }
 
+const WaitStrategySchema = z.enum(['domcontentloaded', 'load', 'networkidle']);
+export type WaitStrategy = z.infer<typeof WaitStrategySchema>;
+
 export const RegisterExtractionTemplateShape = {
   templateId: TemplateIdSchema,
   domainPattern: DomainPatternSchema,
@@ -30,6 +33,17 @@ export const RegisterExtractionTemplateShape = {
   // Set when the template always targets the same page (e.g. "today's deals").
   // Callers can then omit targetUrl entirely at execution time.
   fixedTargetUrl: z.string().refine(isHttpUrl, { message: 'fixedTargetUrl must be an absolute http:// or https:// URL' }).optional(),
+  // How long to wait after navigation before running the script. 'networkidle' (the old
+  // hardcoded default) requires a 500ms window of zero network activity - pathological on
+  // pages with persistent polling/analytics/ads, often adding seconds or timing out
+  // outright. Templates without this set fall back to 'domcontentloaded' at run time
+  // (see engine.ts) - explicitly opt into 'networkidle' only if a template actually needs
+  // content that loads after DOMContentLoaded and isn't covered by readySelector.
+  waitStrategy: WaitStrategySchema.optional(),
+  // If set, wait for this selector to appear (in addition to waitStrategy) before running
+  // the script - the precise way to wait for "the data I need" without paying networkidle's
+  // blanket cost.
+  readySelector: z.string().optional(),
 };
 
 export const RegisterExtractionTemplateInputSchema = z.object(RegisterExtractionTemplateShape);
@@ -117,6 +131,10 @@ export interface ManifestEntry {
   updatedAt: string;
   kind?: 'extraction' | 'action-sequence';
   lastVerified?: { success: boolean; error?: string; timestamp: string };
+  // Absent = falls back to 'domcontentloaded' at run time (see engine.ts). Existing
+  // templates registered before this field existed all take that fallback.
+  waitStrategy?: WaitStrategy;
+  readySelector?: string;
 }
 
 export type Manifest = Record<string, ManifestEntry>;

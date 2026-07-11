@@ -62,7 +62,7 @@ apply the same judgment here you'd apply to writing that code by hand.
 
 | Tool | Input | Notes |
 |---|---|---|
-| `register_extraction_template` | `templateId` (kebab-case), `domainPattern`, `executableScript`, `fixedTargetUrl?` | Upserts by `templateId`. Multiple templates can share a `domainPattern` (N:1) — always pass explicit `templateId` when more than one template targets the same domain, auto-match-by-URL is only reliable for a domain's single most-recently-registered template. Set `fixedTargetUrl` when the page never varies (see below). |
+| `register_extraction_template` | `templateId` (kebab-case), `domainPattern`, `executableScript`, `fixedTargetUrl?`, `waitStrategy?`, `readySelector?` | Upserts by `templateId`. Multiple templates can share a `domainPattern` (N:1) — always pass explicit `templateId` when more than one template targets the same domain, auto-match-by-URL is only reliable for a domain's single most-recently-registered template. Set `fixedTargetUrl` when the page never varies (see below). Default wait is the fast `domcontentloaded` — if a page populates its data asynchronously (a grid that loads after initial paint), set `waitStrategy: 'networkidle'` or, better, `readySelector` naming the element that signals "data's here." |
 | `execute_native_extraction` | `targetUrl?`, `templateId?`, `proxyUrl?`, `cookieString?` | Runs an extraction OR an action-sequence template (dispatched by kind). `targetUrl` is only optional for a `fixedTargetUrl` template. `cookieString` (`name=value; name2=value2`) runs it as a logged-in user AND is auto-saved for that template (see below). Logs a metric on success. |
 | `save_template_cookies` | `templateId`, `cookieString` | Persist session cookies for a template **without running it** — use this when the user mentions/shares cookies in chat so they land in the dashboard. |
 | `batch_download_assets` | `urls: string[]`, `outputDir` | Concurrency-limited (5 at a time). Use for "download the images" rather than a hand-rolled fetch loop. |
@@ -136,6 +136,11 @@ guessed instead of checked, cost a rewrite:
   wrong.
 - The exact request shape of a discovered JSON endpoint (query params, headers) —
   capture it from a real `page.on('response')` listener, don't hand-guess the URL.
+- Whether the default `waitStrategy` (`domcontentloaded`) is enough — confirmed live:
+  a real production template returned 0 items under the fast default because its grid
+  populates asynchronously, and 395 once re-registered with `waitStrategy: 'networkidle'`.
+  If a fresh template returns empty/partial data on the first real run, this is the
+  first thing to check, before assuming the extraction script itself is wrong.
 
 Write one small probe (fetch or DOM query, console.log the shape), confirm it
 matches expectations, *then* register the real template. Skipping the probe is the

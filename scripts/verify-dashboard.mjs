@@ -43,14 +43,20 @@ try {
   const hasCard = rootHtml.includes('dashboard-smoke');
   console.log('GET / status:', rootRes.status, '| shows registered template card:', hasCard);
 
-  const runRes = await fetch(
-    `http://127.0.0.1:3000/api/run/dashboard-smoke?url=${encodeURIComponent(`http://127.0.0.1:${fixturePort}/`)}`
-  );
+  const runRes = await fetch('http://127.0.0.1:3000/api/run/dashboard-smoke', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: `http://127.0.0.1:${fixturePort}/` }),
+  });
   const runJson = await runRes.json();
-  console.log('GET /api/run/... ->', JSON.stringify(runJson));
+  console.log('POST /api/run/... ->', JSON.stringify(runJson));
 
-  const badRes = await fetch('http://127.0.0.1:3000/api/run/dashboard-smoke?url=ftp://example.com');
-  console.log('GET /api/run/... with bad scheme -> status:', badRes.status);
+  const badRes = await fetch('http://127.0.0.1:3000/api/run/dashboard-smoke', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: 'ftp://example.com' }),
+  });
+  console.log('POST /api/run/... with bad scheme -> status:', badRes.status);
 
   const ok =
     rootRes.status === 200 &&
