@@ -2,6 +2,15 @@
 
 A Chrome MV3 extension that records your clicks, typing, and navigation in a normal browser tab, then sends the recording to a local APImeMCP server to be saved and replayed as an action-sequence template.
 
+## Grab Cookies Only
+
+Sometimes you don't want a full recording - you just want a site's session cookies to
+paste somewhere yourself (a template's cookie box, a script, wherever). Click **Grab
+Cookies Only** in the popup: it asks the same per-site permission as Record, reads that
+site's cookies, and shows them in a copyable text box. **Nothing is sent to the server
+or saved automatically** - this is the one action in the extension that stays entirely
+local and manual, by design, so you decide where the cookies go.
+
 ## While recording
 
 The toolbar popup closes the instant you click anywhere on the page - that's normal

@@ -89,6 +89,57 @@ saveBtn.addEventListener('click', () => {
   saveBtn.disabled = true;
 });
 
+const cookiesOnlyBtn = document.getElementById('cookiesOnlyBtn');
+const cookieOnlyResult = document.getElementById('cookieOnlyResult');
+const cookieOutput = document.getElementById('cookieOutput');
+const copyCookiesBtn = document.getElementById('copyCookiesBtn');
+
+cookiesOnlyBtn.addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const pattern = tab && tab.url ? originPatternFor(tab.url) : null;
+  if (!pattern) {
+    setStatus('Cannot read cookies for this page (not a normal http/https tab).', 'error');
+    return;
+  }
+
+  let granted = false;
+  try {
+    granted = await chrome.permissions.request({ origins: [pattern] });
+  } catch (e) {
+    granted = false;
+  }
+  if (!granted) {
+    setStatus('Permission denied - cannot read cookies without it.', 'error');
+    return;
+  }
+
+  const hostname = new URL(tab.url).hostname;
+  const cookies = await chrome.cookies.getAll({ domain: hostname });
+  const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+
+  if (!cookieString) {
+    cookieOnlyResult.style.display = 'none';
+    setStatus(`No cookies found for ${hostname}.`, 'error');
+    return;
+  }
+
+  cookieOutput.value = cookieString;
+  cookieOnlyResult.style.display = 'block';
+  setStatus(`${cookies.length} cookie(s) for ${hostname} - copy below. Nothing saved or sent anywhere.`, 'success');
+});
+
+copyCookiesBtn.addEventListener('click', async () => {
+  cookieOutput.select();
+  try {
+    await navigator.clipboard.writeText(cookieOutput.value);
+    const original = copyCookiesBtn.textContent;
+    copyCookiesBtn.textContent = 'Copied!';
+    setTimeout(() => (copyCookiesBtn.textContent = original), 1200);
+  } catch (e) {
+    setStatus('Copy failed - select the text manually.', 'error');
+  }
+});
+
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'STEP_COUNT_UPDATE') {
     setCounter(message.count);

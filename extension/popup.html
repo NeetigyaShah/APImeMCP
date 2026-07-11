@@ -96,6 +96,25 @@
     color: var(--text-dim);
   }
   .disclosure b { color: var(--text); }
+  .divider { margin: 0.85rem 0 0.6rem; padding-top: 0.65rem; border-top: 1px solid var(--line); }
+  .section-label { font-family: var(--mono); font-size: 0.72rem; color: var(--text-dim); margin-bottom: 0.4rem; }
+  #cookiesOnlyBtn { border-color: var(--phosphor-dim); color: var(--phosphor); }
+  #cookieOnlyResult { display: none; margin-top: 0.5rem; }
+  #cookieOutput {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.5rem;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    resize: vertical;
+    margin-bottom: 0.4rem;
+  }
+  #copyCookiesBtn { border-color: var(--ok); color: var(--ok); margin-bottom: 0; }
+  #copyCookiesBtn:hover:not(:disabled) { background: var(--ok); color: var(--void); }
 </style>
 </head>
 <body>
@@ -112,6 +131,16 @@
       <button id="saveBtn">Save</button>
     </div>
     <div id="status"></div>
+
+    <div class="divider">
+      <div class="section-label">Or just grab this site's cookies</div>
+      <button id="cookiesOnlyBtn">Grab Cookies Only</button>
+      <div id="cookieOnlyResult">
+        <textarea id="cookieOutput" rows="4" readonly></textarea>
+        <button id="copyCookiesBtn">Copy</button>
+      </div>
+    </div>
+
     <div class="disclosure">
       <b>What this does:</b> when you click Record, it asks Chrome's permission to read
       data on the current site only, then captures your clicks/typing/navigation there.
@@ -120,7 +149,11 @@
       Stop &amp; Save without reopening this popup. On Stop, it also reads that site's
       cookies (to reproduce your session on replay) and sends everything to
       <b>your local APImeMCP server</b> (http://127.0.0.1:3000) &mdash; nothing leaves
-      your machine.
+      your machine.<br/><br/>
+      <b>Grab Cookies Only</b> is different: it asks the same per-site permission, reads
+      that site's cookies, and shows them to you to copy &mdash;
+      <b>nothing is sent anywhere or saved automatically.</b> Paste the result wherever
+      you want it (a template's cookie box, a script, etc.) yourself.
     </div>
   </main>
   <script src="popup.js"></script>
