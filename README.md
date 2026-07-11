@@ -86,6 +86,18 @@ with `node scripts/gen-usage.mjs`):
 
 See `apis/README.md` for the index once you've registered at least one template.
 
+## Using a community template (public registry)
+
+```bash
+apimemcp add <domain>
+```
+
+Fetches the matching template from the [apimemcp-templates](https://github.com/NeetigyaShah/APImeMCP-Templates)
+registry and registers it locally — no browser/dashboard startup, just a fetch +
+local write. Works from a fresh install with no existing `templates/` directory.
+See `add_community_template` under Tools for the MCP-tool equivalent, and the
+registry repo's own `CONTRIBUTING.md` to add a template.
+
 ## Test
 
 ```bash
@@ -253,6 +265,25 @@ Re-registering an existing `templateId` with the same script but a new `waitStra
 By default, `execute_native_extraction` also blocks images/media/fonts/CSS for extraction
 templates (not for recorded/action-sequence ones) to speed up runs — pass
 `simulateLowBandwidth: false` explicitly to disable this for one call.
+
+### `add_community_template`
+
+Pull a pre-verified template from the public
+[apimemcp-templates](https://github.com/NeetigyaShah/APImeMCP-Templates) registry (a
+plain git repo, mirrored free via jsDelivr — no server, no publish step beyond a merged
+PR) and register it locally.
+
+| field | type | notes |
+|---|---|---|
+| `domain` | string | e.g. `amazon.com` — matched against the registry's templates by domain, longest-pattern-wins |
+
+Registry templates are marked `source: 'registry'` in your local manifest and run with a
+**network allowlist enforced by default** (only the template's own domain, plus a small
+curated CDN/asset allowlist) — a community template can't exfiltrate scraped data or ride
+your session to an arbitrary endpoint. Locally-authored templates are untouched by this —
+trusted by definition, same as always. Same functionality is available from the shell
+without an MCP client: `apimemcp add <domain>` (no browser/dashboard startup, just a
+fetch + local registration).
 
 ### `execute_native_extraction`
 

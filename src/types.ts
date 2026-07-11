@@ -105,6 +105,13 @@ export const SaveTemplateCookiesShape = {
 export const SaveTemplateCookiesInputSchema = z.object(SaveTemplateCookiesShape);
 export type SaveTemplateCookiesInput = z.infer<typeof SaveTemplateCookiesInputSchema>;
 
+export const AddCommunityTemplateShape = {
+  domain: z.string().min(1, 'domain must not be empty'),
+};
+
+export const AddCommunityTemplateInputSchema = z.object(AddCommunityTemplateShape);
+export type AddCommunityTemplateInput = z.infer<typeof AddCommunityTemplateInputSchema>;
+
 export interface ActionStep {
   type: 'click' | 'fill' | 'select' | 'navigate' | 'waitForNavigation';
   selectors?: string[]; // ordered fallback candidates, e.g. ["[data-testid=submit]", "button:has-text('Submit')"]
@@ -135,6 +142,14 @@ export interface ManifestEntry {
   // templates registered before this field existed all take that fallback.
   waitStrategy?: WaitStrategy;
   readySelector?: string;
+  // System-assigned, NOT part of the public register_extraction_template tool's input
+  // schema (a caller can't just claim 'local' to escape the sandbox) - set only by
+  // registry-client.ts's addFromRegistry(). 'registry' templates get a network
+  // allowlist enforced at run time by default (see engine.ts); locally-authored
+  // templates (source absent) are trusted by definition, matching the existing
+  // self-host power-user experience.
+  source?: 'registry' | 'local';
+  contributedBy?: string;
 }
 
 export type Manifest = Record<string, ManifestEntry>;

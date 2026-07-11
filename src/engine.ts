@@ -70,6 +70,28 @@ function parseCookieString(cookieString: string, targetUrl: string): Array<{ nam
 
 const LOW_BANDWIDTH_BLOCKED_TYPES = new Set(['image', 'media', 'font', 'stylesheet']);
 
+// The real risk from a malicious registry-sourced template isn't code execution
+// (page.evaluate() scripts already run inside Chromium's own V8 isolate - zero access to
+// the Node process/filesystem by the browser's own security model, so a vm2/isolated-vm
+// style Node-sandbox would be solving the wrong layer entirely). The actual risk is
+// network/data-egress: a script could fetch()/exfiltrate scraped data to an
+// attacker-controlled endpoint, or ride along on whatever session identity a
+// cookieString/proxyUrl grants it. This is what networkAllowlist below actually defends
+// against - by observing/restricting real runtime requests, not by trying to sandbox JS.
+export const REGISTRY_CDN_ALLOWLIST = [
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
+  'cdnjs.cloudflare.com',
+  'cdn.jsdelivr.net',
+  'ajax.googleapis.com',
+  'code.jquery.com',
+  'unpkg.com',
+];
+
+function hostMatchesAllowlist(hostname: string, allowlist: string[]): boolean {
+  return allowlist.some((allowed) => hostname === allowed || hostname.endsWith(`.${allowed}`));
+}
+
 function assertJsonSerializable(value: unknown): unknown {
   try {
     return JSON.parse(JSON.stringify(value));
@@ -108,6 +130,12 @@ export interface ExecuteExtractionOptions {
   // hardcoded default.
   waitStrategy?: WaitStrategy;
   readySelector?: string;
+  // Restricts outbound requests during this run to these hostnames only (exact or
+  // subdomain match) - aborts everything else. index.ts sets this to the template's own
+  // domain + REGISTRY_CDN_ALLOWLIST when entry.source === 'registry'; absent (undefined)
+  // for locally-authored templates, which stay unrestricted (trusted by definition, same
+  // as today).
+  networkAllowlist?: string[];
 }
 
 export async function executeExtraction(options: ExecuteExtractionOptions): Promise<unknown> {
@@ -127,6 +155,23 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
           void route.abort();
         } else {
           void route.continue();
+        }
+      });
+    }
+    if (options.networkAllowlist) {
+      const allowlist = options.networkAllowlist;
+      await context.route('**/*', (route) => {
+        let hostname: string;
+        try {
+          hostname = new URL(route.request().url()).hostname.toLowerCase();
+        } catch {
+          void route.abort();
+          return;
+        }
+        if (hostMatchesAllowlist(hostname, allowlist)) {
+          void route.continue();
+        } else {
+          void route.abort();
         }
       });
     }

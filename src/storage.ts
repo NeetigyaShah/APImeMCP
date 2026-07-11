@@ -45,7 +45,13 @@ export async function saveManifest(manifest: Manifest): Promise<void> {
   await atomicWriteFile(getManifestPath(), JSON.stringify(manifest, null, 2));
 }
 
-export async function registerTemplate(input: RegisterExtractionTemplateInput): Promise<ManifestEntry> {
+export async function registerTemplate(
+  // source/contributedBy are NOT part of RegisterExtractionTemplateInput (the Zod-validated
+  // shape the public register_extraction_template MCP tool uses) - only registry-client.ts
+  // calls this function directly in TS with them set, so a template can't self-declare
+  // 'local' to escape the registry sandbox (see types.ts's ManifestEntry.source comment).
+  input: RegisterExtractionTemplateInput & { source?: 'registry' | 'local'; contributedBy?: string }
+): Promise<ManifestEntry> {
   return withLock(async () => {
     const manifest = await loadManifest();
     const now = new Date().toISOString();
@@ -62,6 +68,8 @@ export async function registerTemplate(input: RegisterExtractionTemplateInput): 
       ...(input.fixedTargetUrl ? { fixedTargetUrl: input.fixedTargetUrl } : {}),
       ...(input.waitStrategy ? { waitStrategy: input.waitStrategy } : {}),
       ...(input.readySelector ? { readySelector: input.readySelector } : {}),
+      ...(input.source ? { source: input.source } : {}),
+      ...(input.contributedBy ? { contributedBy: input.contributedBy } : {}),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
@@ -75,6 +83,8 @@ export async function registerTemplate(input: RegisterExtractionTemplateInput): 
 export async function registerActionSequenceTemplate(input: {
   templateId: string;
   sequence: ActionSequence;
+  source?: 'registry' | 'local';
+  contributedBy?: string;
 }): Promise<ManifestEntry> {
   return withLock(async () => {
     const manifest = await loadManifest();
@@ -93,6 +103,8 @@ export async function registerActionSequenceTemplate(input: {
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       kind: 'action-sequence',
+      ...(input.source ? { source: input.source } : {}),
+      ...(input.contributedBy ? { contributedBy: input.contributedBy } : {}),
     };
     manifest[input.templateId] = entry;
     await saveManifest(manifest);

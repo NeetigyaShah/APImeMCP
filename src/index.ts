@@ -10,6 +10,7 @@ import {
   ScheduleStockCheckShape,
   SendNotificationShape,
   SaveTemplateCookiesShape,
+  AddCommunityTemplateShape,
 } from './types.js';
 import type { ExtractionResult, ActionSequence } from './types.js';
 import {
@@ -19,8 +20,9 @@ import {
   findTemplateById,
   findTemplateByUrl,
 } from './storage.js';
-import { initBrowser, closeBrowser, executeExtraction, executeActionSequence, isBrowserReady } from './engine.js';
+import { initBrowser, closeBrowser, executeExtraction, executeActionSequence, isBrowserReady, REGISTRY_CDN_ALLOWLIST } from './engine.js';
 import { saveCookies, getSavedCookies } from './cookie-store.js';
+import { addFromRegistry } from './registry-client.js';
 import { batchDownload } from './downloader.js';
 import { logExtractionMetric, getExtractionStats } from './metrics.js';
 import { sendNotification } from './notifier.js';
@@ -132,6 +134,12 @@ async function runExtraction(
       simulateLowBandwidth: simulateLowBandwidth ?? true,
       waitStrategy: entry.waitStrategy,
       readySelector: entry.readySelector,
+      // Registry-sourced templates are community-contributed, not authored by the
+      // operator - restrict them to their own domain + a curated CDN allowlist so a
+      // malicious/careless one can't exfiltrate scraped data (or ride a cookieString's
+      // session) to an arbitrary endpoint. Locally-authored templates (source absent)
+      // stay unrestricted - trusted by definition, same as before this existed.
+      networkAllowlist: entry.source === 'registry' ? [entry.domainPattern, ...REGISTRY_CDN_ALLOWLIST] : undefined,
     });
     const imageCount = Array.isArray(data) ? data.length : data ? 1 : 0;
     await logExtractionMetric(entry.templateId, resolvedUrl, imageCount);
@@ -149,7 +157,7 @@ const scheduler = new Scheduler(async (targetUrl, templateId) => {
   await runExtraction(targetUrl, templateId);
 });
 
-const server = new McpServer({ name: 'APImeMCP', version: '1.4.0' });
+const server = new McpServer({ name: 'APImeMCP', version: '1.5.0' });
 
 server.tool('register_extraction_template', RegisterExtractionTemplateShape, async (input) => {
   await reportProgress({
@@ -311,6 +319,29 @@ server.tool('batch_download_assets', BatchDownloadShape, async (input) => {
   }
 });
 
+// Pulls a pre-verified template from the public apimemcp-templates registry (a git repo,
+// mirrored free via jsDelivr - no server to run) and registers it locally, so an agent
+// can pull a community template mid-conversation without shelling out to `apimemcp add`.
+server.tool('add_community_template', AddCommunityTemplateShape, async (input) => {
+  try {
+    const result = await addFromRegistry(input.domain);
+    if (result.registered) {
+      log(`Added community template "${result.templateId}" for domain "${input.domain}"`);
+    }
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      isError: !result.registered,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logError(`add_community_template failed: ${message}`);
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: message }) }],
+      isError: true,
+    };
+  }
+});
+
 server.registerPrompt(
   'get_environment_context',
   {
@@ -384,7 +415,34 @@ async function shutdown(signal: string): Promise<void> {
 process.on('SIGINT', () => void shutdown('SIGINT'));
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
-main().catch((err) => {
-  logError(`Fatal startup error: ${err instanceof Error ? err.message : String(err)}`);
-  process.exit(1);
-});
+// `apimemcp add <domain>` - CLI shortcut for add_community_template, no browser/dashboard
+// needed for this (just a fetch + local registration), so it deliberately does NOT call
+// main() at all.
+async function runCliAddCommand(domain: string): Promise<void> {
+  await ensureStorageInitialized();
+  const result = await addFromRegistry(domain);
+  if (result.registered) {
+    console.log(`Registered "${result.templateId}" from the community registry for domain "${domain}".`);
+  } else {
+    console.error(`Could not add a template for "${domain}": ${result.error}`);
+    process.exitCode = 1;
+  }
+}
+
+const [, , cliCommand, cliArg] = process.argv;
+if (cliCommand === 'add') {
+  if (!cliArg) {
+    console.error('Usage: apimemcp add <domain>');
+    process.exitCode = 1;
+  } else {
+    runCliAddCommand(cliArg).catch((err) => {
+      console.error(`Fatal error: ${err instanceof Error ? err.message : String(err)}`);
+      process.exitCode = 1;
+    });
+  }
+} else {
+  main().catch((err) => {
+    logError(`Fatal startup error: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  });
+}
