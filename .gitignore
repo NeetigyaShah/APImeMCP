@@ -11,3 +11,4 @@ bernhardt/
 .mcp-progress.json
 .mcp-dashboard.json
 .playwright-mcp/
+.claude/worktrees/
