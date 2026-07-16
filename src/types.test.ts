@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RegisterExtractionTemplateInputSchema, ExecuteNativeExtractionInputSchema } from './types.js';
+import { ConnectAppInputSchema, RegisterExtractionTemplateInputSchema, ExecuteNativeExtractionInputSchema } from './types.js';
 
 describe('RegisterExtractionTemplateInputSchema', () => {
   it('accepts a valid kebab-case templateId and lowercases domainPattern', () => {
@@ -53,6 +53,27 @@ describe('ExecuteNativeExtractionInputSchema', () => {
     const result = ExecuteNativeExtractionInputSchema.safeParse({
       targetUrl: 'https://example.com',
       proxyUrl: 'http://user:pass@proxy.example.com:8080',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a persistent app connection ID', () => {
+    const result = ExecuteNativeExtractionInputSchema.safeParse({
+      targetUrl: 'https://www.amazon.com/dp/123',
+      templateId: 'amazon-product',
+      connectionId: 'amazon',
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('ConnectAppInputSchema', () => {
+  it('accepts a login URL under the declared domain', () => {
+    const result = ConnectAppInputSchema.safeParse({
+      connectionId: 'amazon',
+      domainPattern: 'amazon.com',
+      loginUrl: 'https://www.amazon.com/ap/signin',
+      autoStart: true,
     });
     expect(result.success).toBe(true);
   });

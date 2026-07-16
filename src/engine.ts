@@ -1,10 +1,19 @@
-import type { Browser, Page } from 'playwright';
+import type { Browser, BrowserContext, Page } from 'playwright';
 import { chromium } from 'playwright-extra';
 import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ActionSequence, ActionStep, WaitStrategy } from './types.js';
+import {
+  confirmAppConnection,
+  getAppConnection,
+  getAppProfilePath,
+  listAppConnections,
+  markAppConnectionError,
+  markAppConnectionOpen,
+} from './app-connections.js';
+import type { AppConnection } from './app-connections.js';
 
 const DEFAULT_WAIT_STRATEGY: WaitStrategy = 'domcontentloaded';
 
@@ -17,6 +26,7 @@ const VIEWPORT = { width: 1280, height: 800 };
 const NAVIGATION_TIMEOUT_MS = 30_000;
 
 let browserInstance: Browser | undefined;
+const appContexts = new Map<string, BrowserContext>();
 
 export async function initBrowser(): Promise<void> {
   if (browserInstance) return;
@@ -24,6 +34,9 @@ export async function initBrowser(): Promise<void> {
 }
 
 export async function closeBrowser(): Promise<void> {
+  const contexts = [...appContexts.entries()];
+  appContexts.clear();
+  await Promise.allSettled(contexts.map(([, context]) => context.close()));
   if (!browserInstance) return;
   const browser = browserInstance;
   browserInstance = undefined;
@@ -39,6 +52,58 @@ function getBrowser(): Browser {
     throw new Error('Browser not initialized. Call initBrowser() before executeExtraction().');
   }
   return browserInstance;
+}
+
+async function ensureAppContext(connectionId: string): Promise<BrowserContext> {
+  const existing = appContexts.get(connectionId);
+  if (existing && !existing.isClosed()) return existing;
+
+  const connection = await getAppConnection(connectionId);
+  if (!connection) throw new Error(`No app connection configured for "${connectionId}"`);
+
+  try {
+    const context = await chromium.launchPersistentContext(getAppProfilePath(connection), {
+      headless: false,
+      userAgent: USER_AGENT,
+      viewport: VIEWPORT,
+    });
+    appContexts.set(connectionId, context);
+    await markAppConnectionOpen(connectionId);
+    const page = context.pages()[0] ?? (await context.newPage());
+    if (page.url() === 'about:blank') {
+      await page.goto(connection.loginUrl, { waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS });
+    }
+    return context;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await markAppConnectionError(connectionId, message).catch(() => undefined);
+    throw err;
+  }
+}
+
+export async function openAppConnection(connectionId: string): Promise<AppConnection> {
+  await ensureAppContext(connectionId);
+  const connection = await getAppConnection(connectionId);
+  if (!connection) throw new Error(`No app connection configured for "${connectionId}"`);
+  return connection;
+}
+
+export async function confirmOpenAppConnection(connectionId: string): Promise<AppConnection> {
+  await ensureAppContext(connectionId);
+  return confirmAppConnection(connectionId);
+}
+
+export async function startConfiguredAppConnections(): Promise<void> {
+  const connections = await listAppConnections();
+  for (const connection of connections.filter((item) => item.autoStart)) {
+    try {
+      await ensureAppContext(connection.connectionId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      // Startup should remain usable even if one optional visible profile cannot open.
+      process.stderr.write(`[APImeMCP] app connection "${connection.connectionId}" failed to start: ${message}\n`);
+    }
+  }
 }
 
 interface ProxyConfig {
@@ -124,6 +189,9 @@ export interface ExecuteExtractionOptions {
   // this is a single-user local tool, not a multi-tenant service. Point cookieString
   // only at domains/accounts you control.
   cookieString?: string;
+  // Uses a persistent, user-managed browser profile created by connect_app. This
+  // replaces manual cookie extraction and keeps login state inside Chromium.
+  connectionId?: string;
   simulateLowBandwidth?: boolean;
   // Falls back to DEFAULT_WAIT_STRATEGY when absent - see the field comment on
   // ManifestEntry.waitStrategy in types.ts for why 'networkidle' stopped being the
@@ -139,12 +207,14 @@ export interface ExecuteExtractionOptions {
 }
 
 export async function executeExtraction(options: ExecuteExtractionOptions): Promise<unknown> {
-  const browser = getBrowser();
-  const context = await browser.newContext({
-    userAgent: USER_AGENT,
-    viewport: VIEWPORT,
-    ...(options.proxyUrl ? { proxy: parseProxy(options.proxyUrl) } : {}),
-  });
+  const persistentContext = options.connectionId ? await ensureAppContext(options.connectionId) : undefined;
+  const context =
+    persistentContext ??
+    (await getBrowser().newContext({
+      userAgent: USER_AGENT,
+      viewport: VIEWPORT,
+      ...(options.proxyUrl ? { proxy: parseProxy(options.proxyUrl) } : {}),
+    }));
   try {
     if (options.cookieString) {
       await context.addCookies(parseCookieString(options.cookieString, options.targetUrl));
@@ -215,9 +285,15 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
         // Forensic capture itself failed (e.g. page already closed) - don't mask the real error.
         throw err;
       }
+    } finally {
+      if (persistentContext) await page.close().catch(() => undefined);
     }
   } finally {
-    await context.close();
+    if (persistentContext) {
+      await context.unroute('**/*').catch(() => undefined);
+    } else {
+      await context.close();
+    }
   }
 }
 
@@ -279,18 +355,23 @@ export interface ExecuteActionSequenceOptions {
   // browser instance is always headless (fixed at initBrowser() launch time, can't be
   // toggled after the fact), so "watch it run" needs its own dedicated instance.
   headful?: boolean;
+  connectionId?: string;
+  networkAllowlist?: string[];
 }
 
 export async function executeActionSequence(options: ExecuteActionSequenceOptions): Promise<void> {
-  const ownBrowser = options.headful ? await chromium.launch({ headless: false }) : undefined;
-  const browser = ownBrowser ?? getBrowser();
-  const context = await browser.newContext({
-    userAgent: USER_AGENT,
-    viewport: VIEWPORT,
-    ...(options.proxyUrl ? { proxy: parseProxy(options.proxyUrl) } : {}),
-  });
+  const persistentContext = options.connectionId ? await ensureAppContext(options.connectionId) : undefined;
+  const ownBrowser = options.headful && !persistentContext ? await chromium.launch({ headless: false }) : undefined;
+  const browser = ownBrowser ?? (persistentContext ? undefined : getBrowser());
+  const context =
+    persistentContext ??
+    (await browser!.newContext({
+      userAgent: USER_AGENT,
+      viewport: VIEWPORT,
+      ...(options.proxyUrl ? { proxy: parseProxy(options.proxyUrl) } : {}),
+    }));
   try {
-    if (options.sequence.cookies) {
+    if (options.sequence.cookies && !options.connectionId) {
       await context.addCookies(mapChromeCookies(options.sequence.cookies));
     }
     if (options.simulateLowBandwidth) {
@@ -299,6 +380,23 @@ export async function executeActionSequence(options: ExecuteActionSequenceOption
           void route.abort();
         } else {
           void route.continue();
+        }
+      });
+    }
+    if (options.networkAllowlist) {
+      const allowlist = options.networkAllowlist;
+      await context.route('**/*', (route) => {
+        let hostname: string;
+        try {
+          hostname = new URL(route.request().url()).hostname.toLowerCase();
+        } catch {
+          void route.abort();
+          return;
+        }
+        if (hostMatchesAllowlist(hostname, allowlist)) {
+          void route.continue();
+        } else {
+          void route.abort();
         }
       });
     }
@@ -330,6 +428,8 @@ export async function executeActionSequence(options: ExecuteActionSequenceOption
         // Forensic capture itself failed (e.g. page already closed) - don't mask the real error.
         throw err;
       }
+    } finally {
+      if (persistentContext) await page.close().catch(() => undefined);
     }
   } finally {
     if (ownBrowser) {
@@ -337,7 +437,11 @@ export async function executeActionSequence(options: ExecuteActionSequenceOption
       // window - the whole point of headful mode is watching it happen.
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
-    await context.close();
+    if (persistentContext) {
+      await context.unroute('**/*').catch(() => undefined);
+    } else {
+      await context.close();
+    }
     if (ownBrowser) {
       await ownBrowser.close();
     }

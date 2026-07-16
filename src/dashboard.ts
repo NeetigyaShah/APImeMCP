@@ -24,7 +24,8 @@ export interface DashboardDeps {
     cookieString?: string,
     simulateLowBandwidth?: boolean,
     headful?: boolean,
-    useSavedCookies?: boolean
+    useSavedCookies?: boolean,
+    connectionId?: string
   ) => Promise<ExtractionResult>;
   scheduler: Scheduler;
   isBrowserReady: () => boolean;
@@ -647,6 +648,7 @@ export function startDashboard(deps: DashboardDeps): void {
     // for extraction templates rather than something that needs rejecting here.
     const headful = body.headful === true;
     const useSavedCookies = body.useSavedCookies === true;
+    const connectionId = typeof body.connectionId === 'string' && body.connectionId ? body.connectionId : undefined;
 
     if (!RegisterExtractionTemplateShape.templateId.safeParse(templateId).success) {
       res.status(400).json({ success: false, error: 'invalid templateId' });
@@ -657,7 +659,16 @@ export function startDashboard(deps: DashboardDeps): void {
       return;
     }
 
-    const result = await deps.runExtraction(targetUrl, templateId, proxyUrl, cookieString, simulateLowBandwidth, headful, useSavedCookies);
+    const result = await deps.runExtraction(
+      targetUrl,
+      templateId,
+      proxyUrl,
+      cookieString,
+      simulateLowBandwidth,
+      headful,
+      useSavedCookies,
+      connectionId
+    );
     res.json(result);
   });
 

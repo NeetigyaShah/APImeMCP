@@ -1,6 +1,6 @@
 ---
 name: using-apimemcp
-description: Use when asked to build a data-extraction API, scraper, downloader, scheduled monitor, or record-and-replay browser workflow for a specific website, or when APImeMCP MCP tools (register_extraction_template, execute_native_extraction, save_template_cookies, add_community_template, batch_download_assets, schedule_stock_check) are available for the task.
+description: Use when asked to build a data-extraction API, scraper, downloader, scheduled monitor, connected browser profile, or record-and-replay browser workflow for a specific website, or when APImeMCP MCP tools are available for the task.
 ---
 
 # Using APImeMCP
@@ -63,7 +63,10 @@ apply the same judgment here you'd apply to writing that code by hand.
 | Tool | Input | Notes |
 |---|---|---|
 | `register_extraction_template` | `templateId` (kebab-case), `domainPattern`, `executableScript`, `fixedTargetUrl?`, `waitStrategy?`, `readySelector?` | Upserts by `templateId`. Multiple templates can share a `domainPattern` (N:1) — always pass explicit `templateId` when more than one template targets the same domain, auto-match-by-URL is only reliable for a domain's single most-recently-registered template. Set `fixedTargetUrl` when the page never varies (see below). Default wait is the fast `domcontentloaded` — if a page populates its data asynchronously (a grid that loads after initial paint), set `waitStrategy: 'networkidle'` or, better, `readySelector` naming the element that signals "data's here." |
-| `execute_native_extraction` | `targetUrl?`, `templateId?`, `proxyUrl?`, `cookieString?` | Runs an extraction OR an action-sequence template (dispatched by kind). `targetUrl` is only optional for a `fixedTargetUrl` template. `cookieString` (`name=value; name2=value2`) runs it as a logged-in user AND is auto-saved for that template (see below). Logs a metric on success. |
+| `execute_native_extraction` | `targetUrl?`, `templateId?`, `proxyUrl?`, `cookieString?`, `connectionId?` | Runs an extraction OR an action-sequence template. Prefer a confirmed `connectionId` for login state; it uses a persistent browser profile and cannot be combined with manual cookie input. Logs a metric on success. |
+| `connect_app` | `connectionId`, `domainPattern`, `loginUrl`, `autoStart?` | Opens a visible persistent Chromium profile for user-driven login. Use one profile per site; call `confirm_app_connection` after login. |
+| `confirm_app_connection` | `connectionId` | Marks the user-managed browser profile ready for extraction. |
+| `list_app_connections` | none | Lists profile IDs, domain scopes, startup behavior, and confirmation status without returning cookie values. |
 | `save_template_cookies` | `templateId`, `cookieString` | Persist session cookies for a template **without running it** — use this when the user mentions/shares cookies in chat so they land in the dashboard. |
 | `add_community_template` | `domain` | Pulls a pre-verified template from the public [apimemcp-templates](https://github.com/NeetigyaShah/APImeMCP-Templates) registry (a plain git repo, no server) and registers it locally — check this **before** writing a new template by hand for a well-known site; someone may have already contributed one. Registry templates run with a network allowlist (own domain + a small CDN allowlist) enforced automatically. |
 | `batch_download_assets` | `urls: string[]`, `outputDir` | Concurrency-limited (5 at a time). Use for "download the images" rather than a hand-rolled fetch loop. |
@@ -95,6 +98,12 @@ isn't ready.
   standalone `apis/<id>.mjs` (only needs Playwright), each with a generated docs page
   at `/docs/<id>`.
 - **Scheduling, metrics, notifications** — cron re-runs, run stats, webhook pings.
+
+## Connected app profiles
+
+Prefer `connect_app` for sites that need login. The user signs in once in a
+visible browser window; the profile is reused across runs and can auto-open when
+the server starts. The server never asks the agent to copy cookie values.
 
 ## Templates with no per-run input ("fixed-target")
 

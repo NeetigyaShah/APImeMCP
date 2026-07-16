@@ -11,6 +11,8 @@ import {
   SendNotificationShape,
   SaveTemplateCookiesShape,
   AddCommunityTemplateShape,
+  ConnectAppShape,
+  AppConnectionIdShape,
 } from './types.js';
 import type { ExtractionResult, ActionSequence } from './types.js';
 import {
@@ -20,7 +22,17 @@ import {
   findTemplateById,
   findTemplateByUrl,
 } from './storage.js';
-import { initBrowser, closeBrowser, executeExtraction, executeActionSequence, isBrowserReady, REGISTRY_CDN_ALLOWLIST } from './engine.js';
+import {
+  initBrowser,
+  closeBrowser,
+  executeExtraction,
+  executeActionSequence,
+  isBrowserReady,
+  REGISTRY_CDN_ALLOWLIST,
+  openAppConnection,
+  confirmOpenAppConnection,
+  startConfiguredAppConnections,
+} from './engine.js';
 import { saveCookies, getSavedCookies } from './cookie-store.js';
 import { addFromRegistry } from './registry-client.js';
 import { batchDownload } from './downloader.js';
@@ -31,6 +43,7 @@ import { reportProgress } from './progress.js';
 import { checkForUpdates } from './updater.js';
 import type { UpdateStatus } from './updater.js';
 import { startDashboard } from './dashboard.js';
+import { getAppConnection, listAppConnections, upsertAppConnection } from './app-connections.js';
 
 let updateStatus: UpdateStatus = { updateAvailable: false, latestCommit: null };
 
@@ -59,7 +72,8 @@ async function runExtraction(
   cookieString?: string,
   simulateLowBandwidth?: boolean,
   headful?: boolean,
-  useSavedCookies?: boolean
+  useSavedCookies?: boolean,
+  connectionId?: string
 ): Promise<ExtractionResult> {
   const startedAt = Date.now();
   const buildMeta = (id: string, domainMatched: string, resolvedUrl: string) => ({
@@ -103,10 +117,36 @@ async function runExtraction(
       return { success: false, error, meta: buildMeta(entry.templateId, entry.domainPattern, '') };
     }
 
+    if (connectionId) {
+      if (cookieString || useSavedCookies) {
+        throw new Error('connectionId cannot be combined with cookieString or useSavedCookies');
+      }
+      const connection = await getAppConnection(connectionId);
+      if (!connection) throw new Error(`No app connection configured for "${connectionId}"`);
+      if (connection.status !== 'confirmed') {
+        throw new Error(`App connection "${connectionId}" is not confirmed; log in and call confirm_app_connection first`);
+      }
+      const targetHostname = new URL(resolvedUrl).hostname.toLowerCase();
+      const matchesConnection =
+        targetHostname === connection.domainPattern || targetHostname.endsWith(`.${connection.domainPattern}`);
+      if (!matchesConnection) {
+        throw new Error(
+          `targetUrl hostname "${targetHostname}" does not match app connection "${connectionId}" (${connection.domainPattern})`
+        );
+      }
+    }
+
     if (entry.kind === 'action-sequence') {
       const raw = await fs.readFile(path.resolve(process.cwd(), entry.scriptPath), 'utf8');
       const sequence = JSON.parse(raw) as ActionSequence;
-      await executeActionSequence({ sequence, proxyUrl, simulateLowBandwidth, headful });
+      await executeActionSequence({
+        sequence,
+        proxyUrl,
+        simulateLowBandwidth,
+        headful,
+        connectionId,
+        networkAllowlist: entry.source === 'registry' ? [entry.domainPattern, ...REGISTRY_CDN_ALLOWLIST] : undefined,
+      });
       await logExtractionMetric(entry.templateId, resolvedUrl, 0);
       await reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
       return {
@@ -118,14 +158,15 @@ async function runExtraction(
 
     // Auto-store any cookies the caller supplied so the dashboard can offer to reuse
     // them later; if none supplied and the caller asked, fall back to the saved ones.
-    if (cookieString) await saveCookies(entry.templateId, cookieString);
-    const effectiveCookies = cookieString || (useSavedCookies ? await getSavedCookies(entry.templateId) : undefined);
+    if (!connectionId && cookieString) await saveCookies(entry.templateId, cookieString);
+    const effectiveCookies = connectionId ? undefined : cookieString || (useSavedCookies ? await getSavedCookies(entry.templateId) : undefined);
 
     const data = await executeExtraction({
       targetUrl: resolvedUrl,
       scriptPath: entry.scriptPath,
       proxyUrl,
       cookieString: effectiveCookies,
+      connectionId,
       // Extraction is pure data, no visual dependency - block images/media/fonts/CSS by
       // default to cut load time, unless the caller explicitly asked otherwise. (Only
       // reached for non-action-sequence templates - see the early-return above - so no
@@ -196,11 +237,67 @@ server.tool('register_extraction_template', RegisterExtractionTemplateShape, asy
 });
 
 server.tool('execute_native_extraction', ExecuteNativeExtractionShape, async (input) => {
-  const result = await runExtraction(input.targetUrl, input.templateId, input.proxyUrl, input.cookieString);
+  const result = await runExtraction(
+    input.targetUrl,
+    input.templateId,
+    input.proxyUrl,
+    input.cookieString,
+    undefined,
+    undefined,
+    undefined,
+    input.connectionId
+  );
   return {
     content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
     isError: !result.success,
   };
+});
+
+server.tool('connect_app', ConnectAppShape, async (input) => {
+  try {
+    const configured = await upsertAppConnection(input);
+    const opened = await openAppConnection(configured.connectionId);
+    log(`Opened login profile for app connection "${opened.connectionId}"`);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(
+            {
+              success: true,
+              connection: opened,
+              nextStep: 'Log in in the visible browser window, then call confirm_app_connection.',
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logError(`connect_app failed: ${message}`);
+    return { content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: message }) }], isError: true };
+  }
+});
+
+server.tool('confirm_app_connection', AppConnectionIdShape, async (input) => {
+  try {
+    const connection = await confirmOpenAppConnection(input.connectionId);
+    log(`Confirmed app connection "${connection.connectionId}"`);
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({ success: true, connection }, null, 2) }],
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logError(`confirm_app_connection failed: ${message}`);
+    return { content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: message }) }], isError: true };
+  }
+});
+
+server.tool('list_app_connections', {}, async () => {
+  const connections = await listAppConnections();
+  return { content: [{ type: 'text' as const, text: JSON.stringify(connections, null, 2) }] };
 });
 
 // Persist session cookies for a template WITHOUT running it, so a cookie mentioned in a
@@ -393,6 +490,7 @@ server.registerResource(
 async function main(): Promise<void> {
   await ensureStorageInitialized();
   await initBrowser();
+  await startConfiguredAppConnections();
   await scheduler.loadPersisted();
   startDashboard({ runExtraction, scheduler, isBrowserReady, log, logError });
   void checkForUpdates().then((status) => {

@@ -98,6 +98,57 @@ local write. Works from a fresh install with no existing `templates/` directory.
 See `add_community_template` under Tools for the MCP-tool equivalent, and the
 registry repo's own `CONTRIBUTING.md` to add a template.
 
+## Connected app profiles (no manual cookie extraction)
+
+For sites that require login, use a persistent browser profile instead of copying
+cookies into chat. Each connection gets its own Chromium profile under
+`templates/app-profiles/<connectionId>/` and is scoped to one domain pattern.
+
+An agent can start the login flow:
+
+```js
+await client.callTool({
+  name: 'connect_app',
+  arguments: {
+    connectionId: 'amazon',
+    domainPattern: 'amazon.com',
+    loginUrl: 'https://www.amazon.com/ap/signin',
+    autoStart: true
+  }
+});
+```
+
+APImeMCP opens a visible browser window. Log in normally in that window, then
+confirm the connection:
+
+```js
+await client.callTool({
+  name: 'confirm_app_connection',
+  arguments: { connectionId: 'amazon' }
+});
+```
+
+Use the connection on an extraction:
+
+```js
+await client.callTool({
+  name: 'execute_native_extraction',
+  arguments: {
+    templateId: 'amazon-product',
+    targetUrl: 'https://www.amazon.com/dp/EXAMPLE',
+    connectionId: 'amazon'
+  }
+});
+```
+
+Connections with `autoStart: true` reopen their persistent browser profiles when
+the MCP server starts. The server does not scrape or print cookies; Chromium owns
+the session state. The profile directories are still sensitive login material and
+must not be committed or shared. Use `list_app_connections` to inspect configured
+profiles. Native OAuth/API connectors for services such as Slack or Google Drive
+can be added later as a separate connector type when the provider's client ID,
+scopes, and callback policy are known.
+
 ## Test
 
 ```bash
@@ -293,6 +344,7 @@ Run a registered template against a URL.
 |---|---|---|
 | `targetUrl` | string, optional | absolute `http://` or `https://` URL. Omit only when `templateId` refers to a template registered with `fixedTargetUrl` — that URL is used automatically. |
 | `templateId` | string, optional | explicit template; if omitted, resolved from `targetUrl`'s domain (in which case `targetUrl` is required) |
+| `connectionId` | string, optional | confirmed persistent browser profile created by `connect_app`; must match the target domain; cannot be combined with manual cookie input |
 | `proxyUrl` | string, optional | e.g. `http://user:pass@host:port`, passed through to Playwright's `context.newContext({ proxy })` for routing through an authorized egress proxy or testing region-specific rendering. No automated rotation. |
 
 Returns `{ success, data?, error?, meta: { url, templateId, domainMatched, durationMs, timestamp } }`.
@@ -385,6 +437,32 @@ Saves to `templates/saved-cookies.json`. The dashboard then shows a **🔑 cooki
 saved** badge and a **🔑 Use saved cookies** button on that template's row. Cookies
 also passed via `execute_native_extraction`'s `cookieString` are saved the same way
 automatically. Own accounts/domains only — these are live session credentials.
+
+### `connect_app`
+
+Open or configure a persistent browser profile for a logged-in site. The visible
+browser window is intentionally user-driven: complete login there, then call
+`confirm_app_connection`.
+
+| field | type | notes |
+|---|---|---|
+| `connectionId` | string | lowercase kebab-case profile name, e.g. `amazon` |
+| `domainPattern` | string | domain that owns the login profile |
+| `loginUrl` | string | absolute `http://`/`https://` URL under the domain |
+| `autoStart` | boolean, optional | reopen this profile when the server starts |
+
+### `confirm_app_connection`
+
+Mark a visible profile ready for extraction after login.
+
+| field | type | notes |
+|---|---|---|
+| `connectionId` | string | configured profile to confirm |
+
+### `list_app_connections`
+
+No input. Returns configured connection IDs, domain scopes, startup behavior, and
+confirmation status. It never returns cookie values.
 
 ## Prompts
 

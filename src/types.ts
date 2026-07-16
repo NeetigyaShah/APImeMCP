@@ -54,6 +54,9 @@ export const ExecuteNativeExtractionShape = {
   // fixedTargetUrl) - the registered URL is used automatically.
   targetUrl: z.string().refine(isHttpUrl, { message: 'targetUrl must be an absolute http:// or https:// URL' }).optional(),
   templateId: TemplateIdSchema.optional(),
+  // Optional persistent browser profile created by connect_app. When supplied,
+  // the run uses the profile's local browser session instead of cookieString.
+  connectionId: TemplateIdSchema.optional(),
   proxyUrl: z.string().url().optional(),
   // Session cookies ("name=value; name2=value2") to run as a logged-in user. When
   // supplied, they're also saved for this template so the dashboard can offer to reuse
@@ -63,6 +66,23 @@ export const ExecuteNativeExtractionShape = {
 
 export const ExecuteNativeExtractionInputSchema = z.object(ExecuteNativeExtractionShape);
 export type ExecuteNativeExtractionInput = z.infer<typeof ExecuteNativeExtractionInputSchema>;
+
+export const ConnectAppShape = {
+  connectionId: TemplateIdSchema,
+  domainPattern: DomainPatternSchema,
+  loginUrl: z.string().refine(isHttpUrl, { message: 'loginUrl must be an absolute http:// or https:// URL' }),
+  autoStart: z.boolean().optional(),
+};
+
+export const ConnectAppInputSchema = z.object(ConnectAppShape);
+export type ConnectAppInput = z.infer<typeof ConnectAppInputSchema>;
+
+export const AppConnectionIdShape = {
+  connectionId: TemplateIdSchema,
+};
+
+export const AppConnectionIdInputSchema = z.object(AppConnectionIdShape);
+export type AppConnectionIdInput = z.infer<typeof AppConnectionIdInputSchema>;
 
 export const BatchDownloadShape = {
   urls: z.array(z.string().refine(isHttpUrl, { message: 'each url must be an absolute http:// or https:// URL' })),
