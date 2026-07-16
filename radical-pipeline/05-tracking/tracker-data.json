@@ -1,0 +1,2263 @@
+{
+  "START_DATE": "TBD-set-at-execution",
+  "waveDurationEstimatesDays": {
+    "0": 5,
+    "1": 8,
+    "2": 8,
+    "3": 10,
+    "4": 8,
+    "5": 6,
+    "P0": 6,
+    "P1": 10,
+    "P2": 10,
+    "P3": 6,
+    "P4": 4
+  },
+  "features": [
+    {
+      "id": "F00",
+      "name": "App-connections hardening & merge",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Foundation",
+      "description": "Land in-flight persistent-login feature through gates; retrofit ADR-02; fix engine↔app-connections erosion",
+      "valueWhy": "Lands the in-flight persistent-login feature safely and clears the biggest index.ts contention before Wave 1.",
+      "toolOrSurface": "MCP tools: connect_app / confirm_app_connection / list_app_connections",
+      "modules": [
+        "app-connections.ts",
+        "engine.ts",
+        "index.ts"
+      ],
+      "newModule": false,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [],
+      "wave": 0,
+      "criticalPath": true,
+      "gates": {
+        "arch": true,
+        "security": true,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F01",
+      "name": "Schema contracts",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Reliability",
+      "description": "Template declares output JSON Schema; validated each run",
+      "valueWhy": "Templates without a declared shape are unverifiable; schema contracts make drift and self-healing possible.",
+      "toolOrSurface": "outputSchema on ManifestEntry + validateOutput()",
+      "modules": [
+        "types/schema.ts",
+        "storage",
+        "engine",
+        "index"
+      ],
+      "newModule": false,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [],
+      "wave": 1,
+      "criticalPath": true,
+      "gates": {
+        "arch": true,
+        "security": false,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F02",
+      "name": "Drift detection",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Reliability",
+      "description": "Diff live shape vs contract → flag; expose reusable diff primitive",
+      "valueWhy": "Sites change silently; drift detection is the reliability trigger every self-heal/monitor feature reuses.",
+      "toolOrSurface": "reusable diff primitive + drift flag on run result",
+      "modules": [
+        "drift.ts (new)",
+        "engine",
+        "metrics",
+        "dashboard"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [
+        "F01"
+      ],
+      "wave": 2,
+      "criticalPath": true,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": false
+      }
+    },
+    {
+      "id": "F03",
+      "name": "Nightly re-verification + badges",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Reliability",
+      "description": "verify-registry.mjs + nightly workflow → shields.io status",
+      "valueWhy": "Community trust needs proof templates still work; nightly badges make verification visible and continuous.",
+      "toolOrSurface": "scripts/verify-registry.mjs + nightly workflow + shields.io badge",
+      "modules": [
+        "scripts/verify-registry.mjs (new)",
+        "workflow (new)",
+        "registry-client"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [],
+      "wave": 1,
+      "criticalPath": true,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Low",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F04",
+      "name": "Self-healing templates",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Reliability",
+      "description": "On drift, hand forensic DOM+old script to the calling agent → fix → verify → registry PR (never auto-merge)",
+      "valueWhy": "Self-healing is the moat vs. computer-use: fix once, stay fixed automatically instead of degrading silently.",
+      "toolOrSurface": "self-heal.mjs forensic handoff + registry PR helper",
+      "modules": [
+        "self-heal.mjs (new)",
+        "engine",
+        "registry PR helper"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "security-and-hardening",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [
+        "F02",
+        "F03",
+        "F05"
+      ],
+      "wave": 3,
+      "criticalPath": true,
+      "gates": {
+        "arch": true,
+        "security": true,
+        "live": true
+      },
+      "owner": null,
+      "risk": "High",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F05",
+      "name": "synthesize_schema (agent-native)",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Agent-native",
+      "description": "renderPage() → agent writes script → dry-run via executeExtraction → register",
+      "valueWhy": "Lets any calling agent author a new template without a human writing Playwright by hand.",
+      "toolOrSurface": "MCP tool: synthesize_schema (renderPage)",
+      "modules": [
+        "engine (renderPage)",
+        "index"
+      ],
+      "newModule": false,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [],
+      "wave": 1,
+      "criticalPath": true,
+      "gates": {
+        "arch": true,
+        "security": false,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F06",
+      "name": "Computer-use crystallization",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Agent-native",
+      "description": "Agent solves unmapped site via computer-use → record → crystallize → optional auto-PR",
+      "valueWhy": "Extends authoring to sites with no existing template at all via computer-use, then crystallizes to deterministic.",
+      "toolOrSurface": "computer-use crystallization flow (record→crystallize→PR)",
+      "modules": [
+        "engine",
+        "storage",
+        "registry-client"
+      ],
+      "newModule": false,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "security-and-hardening",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [
+        "F05"
+      ],
+      "wave": 3,
+      "criticalPath": true,
+      "gates": {
+        "arch": true,
+        "security": true,
+        "live": true
+      },
+      "owner": null,
+      "risk": "High",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F07",
+      "name": "Template pipelines / DAG",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Fabric",
+      "description": "Chain templates; pipeline def + runner",
+      "valueWhy": "Real workflows chain multiple templates; a pipeline runner turns single calls into composable capability.",
+      "toolOrSurface": "MCP tool: run_pipeline (DAG runner)",
+      "modules": [
+        "pipeline.ts (new)",
+        "types",
+        "index"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [],
+      "wave": 3,
+      "criticalPath": false,
+      "gates": {
+        "arch": true,
+        "security": false,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F08",
+      "name": "CEL conditional branching",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Fabric",
+      "description": "Port Kriya's CEL evaluator; action-sequence branches on live state",
+      "valueWhy": "Live-state branching (found item / no results / captcha) is required for realistic multi-step flows.",
+      "toolOrSurface": "CEL branching in action-sequence templates",
+      "modules": [
+        "cel-eval.ts (new)",
+        "engine",
+        "types"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [],
+      "wave": 3,
+      "criticalPath": false,
+      "gates": {
+        "arch": true,
+        "security": false,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": false,
+        "S5": true
+      }
+    },
+    {
+      "id": "F09",
+      "name": "Bidirectional flows",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Fabric",
+      "description": "Read A → transform → form-fill write into B",
+      "valueWhy": "Read+write flows (copy data from A into B) unlock RPA-replacement use cases, not just read-only scraping.",
+      "toolOrSurface": "bidirectional read→transform→write flow",
+      "modules": [
+        "engine",
+        "pipeline"
+      ],
+      "newModule": false,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "security-and-hardening",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [
+        "F07",
+        "F10"
+      ],
+      "wave": 4,
+      "criticalPath": false,
+      "gates": {
+        "arch": true,
+        "security": true,
+        "live": true
+      },
+      "owner": null,
+      "risk": "High",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": false
+      }
+    },
+    {
+      "id": "F10",
+      "name": "Transform / normalize layer",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Fabric",
+      "description": "jq-like output mapping",
+      "valueWhy": "Raw extracted shapes rarely match what a consumer wants; jq-like mapping normalizes output once, centrally.",
+      "toolOrSurface": "TransformSpec + applyTransform() (jq-like mapping)",
+      "modules": [
+        "transform.ts (new)",
+        "types",
+        "index"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality"
+      ],
+      "deps": [],
+      "wave": 2,
+      "criticalPath": false,
+      "gates": {
+        "arch": true,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Low",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": false,
+        "S5": true
+      }
+    },
+    {
+      "id": "F11",
+      "name": "Signed provenance receipts",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Compliance",
+      "description": "content-hash + version + schema-valid, signed, exportable",
+      "valueWhy": "Regulated/financial consumers need tamper-evident proof of what was fetched and when.",
+      "toolOrSurface": "signed, exportable provenance receipt",
+      "modules": [
+        "provenance.ts (new)",
+        "engine",
+        "types"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality"
+      ],
+      "deps": [
+        "F01"
+      ],
+      "wave": 3,
+      "criticalPath": false,
+      "gates": {
+        "arch": true,
+        "security": true,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": false
+      }
+    },
+    {
+      "id": "F12",
+      "name": "Policy engine",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Compliance",
+      "description": "robots.txt/ToS awareness + per-template rate limits",
+      "valueWhy": "Respecting robots.txt/ToS and rate limits is the ethical/legal floor for a scraping-adjacent product.",
+      "toolOrSurface": "policy engine (robots.txt/ToS + rate limits)",
+      "modules": [
+        "policy.ts (new)",
+        "engine"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [],
+      "wave": 4,
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": true,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": false
+      }
+    },
+    {
+      "id": "F13",
+      "name": "Encrypted credential vault",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Compliance",
+      "description": "Encrypted secrets injected at run; distinct from app-connections",
+      "valueWhy": "Some templates need real secrets (API keys, form values) distinct from browser login state.",
+      "toolOrSurface": "MCP tool: vault get/set (encrypted secrets)",
+      "modules": [
+        "vault.ts (new)",
+        "cookie-store",
+        "engine"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "security-and-hardening"
+      ],
+      "deps": [
+        "F00"
+      ],
+      "wave": 4,
+      "criticalPath": false,
+      "gates": {
+        "arch": true,
+        "security": true,
+        "live": false
+      },
+      "owner": null,
+      "risk": "High",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F14",
+      "name": "Metrics 2.0 (SLA)",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Dist+Perf",
+      "description": "Aggregate success-rate + latency (durationMs already captured)",
+      "valueWhy": "Success-rate + latency SLAs are what a paying/consumer audience actually judges reliability by.",
+      "toolOrSurface": "metrics dashboard aggregation (SLA)",
+      "modules": [
+        "metrics",
+        "dashboard"
+      ],
+      "newModule": false,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "observability-and-instrumentation"
+      ],
+      "deps": [],
+      "wave": 1,
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Low",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": false
+      }
+    },
+    {
+      "id": "F15",
+      "name": "static-http template kind",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Dist+Perf",
+      "description": "cheerio fast-path (no browser) — 10–50x faster for no-JS pages",
+      "valueWhy": "Most pages need no browser at all; a cheerio fast-path is 10-50x cheaper and enables cloud-tier free execution.",
+      "toolOrSurface": "static-http template kind (cheerio fast-path)",
+      "modules": [
+        "types",
+        "storage",
+        "engine",
+        "index (+cheerio)"
+      ],
+      "newModule": false,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "performance-optimization",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [],
+      "wave": 3,
+      "criticalPath": false,
+      "gates": {
+        "arch": true,
+        "security": false,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F16",
+      "name": "Short-TTL result cache",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Dist+Perf",
+      "description": "in-mem Map TTL; key=templateId+url+cookie-present+proxy",
+      "valueWhy": "Repeated identical calls in a short window shouldn't re-run a full browser session.",
+      "toolOrSurface": "in-mem TTL result cache",
+      "modules": [
+        "result-cache.ts (new)",
+        "index"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "performance-optimization"
+      ],
+      "deps": [
+        "F14"
+      ],
+      "wave": 2,
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": true,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Low",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F17",
+      "name": "OpenTelemetry observability",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Dist+Perf",
+      "description": "Export ADR-04 measures as OTel",
+      "valueWhy": "Standard OTel export lets ops teams plug APImeMCP into their existing observability stack.",
+      "toolOrSurface": "OTel exporter adapter",
+      "modules": [
+        "otel adapter (new)",
+        "engine"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "observability-and-instrumentation",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [
+        "F14"
+      ],
+      "wave": 4,
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": false,
+        "S5": false
+      }
+    },
+    {
+      "id": "F18",
+      "name": "Ephemeral hosted endpoint",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Dist+Perf",
+      "description": "read-registry + zero-state HTTP endpoint; the substrate X01/X02 productize",
+      "valueWhy": "A zero-state hosted endpoint is the substrate the entire cloud/consumer platform (X01/X02) is built on.",
+      "toolOrSurface": "ephemeral hosted HTTP endpoint",
+      "modules": [
+        "hosted entry (new)"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "security-and-hardening",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [
+        "F11"
+      ],
+      "wave": 5,
+      "criticalPath": true,
+      "gates": {
+        "arch": false,
+        "security": true,
+        "live": true
+      },
+      "owner": null,
+      "risk": "High",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F19",
+      "name": "Close items 4/5 gaps",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Dist+Perf",
+      "description": "apimemcp add CLI + lint-in-CI + live network-behavior check in verify-registry",
+      "valueWhy": "Closes known roadmap gaps (CLI ergonomics, CI lint, live network check) blocking a clean v1 release.",
+      "toolOrSurface": "apimemcp add CLI + CI lint + live network check",
+      "modules": [
+        "index (argv)",
+        "verify.yml",
+        "verify-registry"
+      ],
+      "newModule": false,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [
+        "F03"
+      ],
+      "wave": 1,
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Low",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F20",
+      "name": "Change-monitoring mesh",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Creative",
+      "description": "Diff template results over time → events (reuses F02 diff)",
+      "valueWhy": "Turns one-shot diffing into a standing mesh of watched templates — the basis of the mobile monitor feature.",
+      "toolOrSurface": "change-monitoring mesh (scheduler+notifier)",
+      "modules": [
+        "scheduler",
+        "notifier",
+        "drift"
+      ],
+      "newModule": false,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "observability-and-instrumentation",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [
+        "F02"
+      ],
+      "wave": 4,
+      "criticalPath": true,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F21",
+      "name": "NL→template one-shot",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Creative",
+      "description": "'make me an API for X' wrapper (F05+F06)",
+      "valueWhy": "Removes the last friction step: an agent just says what it wants and gets a working template.",
+      "toolOrSurface": "MCP tool: NL→template one-shot wrapper",
+      "modules": [
+        "index wrapper"
+      ],
+      "newModule": false,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality"
+      ],
+      "deps": [
+        "F05",
+        "F06"
+      ],
+      "wave": 5,
+      "criticalPath": true,
+      "gates": {
+        "arch": true,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F22",
+      "name": "Semantic template discovery",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Creative",
+      "description": "Search 'what can APImeMCP do for domain X' (local+registry)",
+      "valueWhy": "Discoverability turns the registry from a list into an answerable \"what can this do for me\" surface.",
+      "toolOrSurface": "MCP tool: discover_templates (semantic search)",
+      "modules": [
+        "discovery (new)",
+        "registry-client"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality"
+      ],
+      "deps": [],
+      "wave": 2,
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Low",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F23",
+      "name": "Golden-snapshot regression",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Creative",
+      "description": "Record known-good output; regression-detect",
+      "valueWhy": "Regression protection so a template fix or engine change can't silently break output shape again.",
+      "toolOrSurface": "golden-snapshot regression harness",
+      "modules": [
+        "snapshot infra (new)"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality",
+        "browser-testing-with-devtools"
+      ],
+      "deps": [
+        "F01"
+      ],
+      "wave": 2,
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Low",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": false
+      }
+    },
+    {
+      "id": "F24",
+      "name": "Marketplace reputation + semver",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Creative",
+      "description": "Contributor reputation + template versioning/changelog",
+      "valueWhy": "Reputation + semver make the registry trustworthy at scale as more contributors show up.",
+      "toolOrSurface": "registry reputation + semver tooling",
+      "modules": [
+        "registry tooling",
+        "registry-client"
+      ],
+      "newModule": false,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality"
+      ],
+      "deps": [
+        "F03",
+        "F14"
+      ],
+      "wave": 5,
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": true,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "F25",
+      "name": "OpenAPI + client export",
+      "program": 1,
+      "surface": "Server",
+      "pillar": "Creative",
+      "description": "Generate OpenAPI + typed client from a bundle",
+      "valueWhy": "Standard OpenAPI/client export lets any existing tool integrate with zero APImeMCP-specific glue.",
+      "toolOrSurface": "OpenAPI spec + typed client exporter",
+      "modules": [
+        "exporter (new)",
+        "usage pattern"
+      ],
+      "newModule": true,
+      "skills": [
+        "test-driven-development",
+        "spec-driven-development",
+        "code-review-and-quality"
+      ],
+      "deps": [
+        "F01",
+        "F07"
+      ],
+      "wave": 5,
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "W01",
+      "name": "Platform monorepo scaffold",
+      "program": 2,
+      "surface": "Web",
+      "pillar": "Web",
+      "description": "Turborepo (apps/web, apps/mobile, packages/shared) + Vercel project + CI/CD",
+      "valueWhy": "One monorepo with shared types is what makes web+mobile+cloud a coherent platform instead of three silos.",
+      "toolOrSurface": "Turborepo scaffold (apps/web, apps/mobile, packages/shared)",
+      "modules": [
+        "apps/web",
+        "apps/mobile",
+        "packages/shared",
+        "turbo.json",
+        "vercel project"
+      ],
+      "newModule": true,
+      "skills": [
+        "next-forge",
+        "deployments-cicd"
+      ],
+      "deps": [],
+      "wave": "P0",
+      "criticalPath": false,
+      "gates": {
+        "arch": true,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Low",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": false,
+        "S5": true
+      }
+    },
+    {
+      "id": "W02",
+      "name": "Cross-surface design system",
+      "program": 2,
+      "surface": "Web",
+      "pillar": "Web",
+      "description": "Shared tokens; phosphor/void identity elevated; web+mobile",
+      "valueWhy": "A single design system keeps web and mobile visually and behaviorally one product.",
+      "toolOrSurface": "shared design tokens (web + mobile)",
+      "modules": [
+        "packages/shared/tokens",
+        "tailwind theme",
+        "RN theme"
+      ],
+      "newModule": false,
+      "skills": [
+        "frontend-design",
+        "ui-ux-pro-max:design-system",
+        "shadcn"
+      ],
+      "deps": [
+        "W01"
+      ],
+      "wave": "P0",
+      "criticalPath": false,
+      "gates": {
+        "arch": true,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": false,
+        "S5": false
+      }
+    },
+    {
+      "id": "W03",
+      "name": "Registry browser + search",
+      "program": 2,
+      "surface": "Web",
+      "pillar": "Web",
+      "description": "Browse/filter templates + verification badges",
+      "valueWhy": "The registry has to be browsable before anyone can discover or run a community template.",
+      "toolOrSurface": "route: /registry (browse/search)",
+      "modules": [
+        "apps/web/app/registry",
+        "registry API client"
+      ],
+      "newModule": false,
+      "skills": [
+        "vercel:nextjs",
+        "vercel:shadcn",
+        "ui-ux-pro-max"
+      ],
+      "deps": [
+        "W01",
+        "W02",
+        "X07"
+      ],
+      "wave": "P1",
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Low",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "W04",
+      "name": "Template detail + schema/docs",
+      "program": 2,
+      "surface": "Web",
+      "pillar": "Web",
+      "description": "Rendered docs + F01 schema + Run entry",
+      "valueWhy": "Consumers need to see the schema/verification/provenance for a template before trusting a Run.",
+      "toolOrSurface": "route: /registry/[id] (template detail)",
+      "modules": [
+        "apps/web/app/registry/[id]",
+        "schema renderer"
+      ],
+      "newModule": false,
+      "skills": [
+        "vercel:nextjs",
+        "dataviz"
+      ],
+      "deps": [
+        "W03",
+        "F01"
+      ],
+      "wave": "P1",
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Low",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "W05",
+      "name": "Web run console",
+      "program": 2,
+      "surface": "Web",
+      "pillar": "Web",
+      "description": "Call X01; live results (JSON/table/image)",
+      "valueWhy": "The core consumer loop — run a community API and see results — happens here.",
+      "toolOrSurface": "route: /run (live run console)",
+      "modules": [
+        "apps/web/app/run",
+        "X01 client",
+        "SSE client"
+      ],
+      "newModule": false,
+      "skills": [
+        "vercel:nextjs",
+        "dataviz",
+        "ui-ux-pro-max:ui-styling"
+      ],
+      "deps": [
+        "W04",
+        "X01",
+        "X04"
+      ],
+      "wave": "P2",
+      "criticalPath": true,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "W06",
+      "name": "Contribute flow",
+      "program": 2,
+      "surface": "Web",
+      "pillar": "Web",
+      "description": "PR onboarding + gate explainer",
+      "valueWhy": "Lowers the bar for new contributors, growing registry coverage (the flywheel).",
+      "toolOrSurface": "route: /contribute",
+      "modules": [
+        "apps/web/app/contribute"
+      ],
+      "newModule": false,
+      "skills": [
+        "vercel:nextjs",
+        "documentation-and-adrs"
+      ],
+      "deps": [
+        "W03"
+      ],
+      "wave": "P2",
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Low",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "W07",
+      "name": "Auth + accounts + dashboard",
+      "program": 2,
+      "surface": "Web",
+      "pillar": "Web",
+      "description": "Clerk auth; monitors/history/keys",
+      "valueWhy": "Accounts are required before monitors/history/API keys can exist at all.",
+      "toolOrSurface": "route: /account (auth + dashboard)",
+      "modules": [
+        "apps/web/app/account",
+        "Clerk auth",
+        "dashboard"
+      ],
+      "newModule": false,
+      "skills": [
+        "vercel:auth",
+        "vercel:vercel-storage"
+      ],
+      "deps": [
+        "W01"
+      ],
+      "wave": "P1",
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": true,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "W08",
+      "name": "Landing + interactive hero",
+      "program": 2,
+      "surface": "Web",
+      "pillar": "Web",
+      "description": "Vision pages + live compile-and-run hero demo",
+      "valueWhy": "First impression and conversion surface; the live hero demo proves the product in 10 seconds.",
+      "toolOrSurface": "route: / (landing + live hero demo)",
+      "modules": [
+        "apps/web/app/(landing)",
+        "hero demo component"
+      ],
+      "newModule": false,
+      "skills": [
+        "frontend-design",
+        "ui-ux-pro-max:ui-ux-pro-max",
+        "ui-ux-pro-max:banner-design"
+      ],
+      "deps": [
+        "W02",
+        "X01"
+      ],
+      "wave": "P2",
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "X01",
+      "name": "Execution API gateway",
+      "program": 2,
+      "surface": "Cloud",
+      "pillar": "Cloud",
+      "description": "POST/GET run; auth + rate-limit",
+      "valueWhy": "The single gateway every web/mobile run call goes through; auth + rate-limit live here once.",
+      "toolOrSurface": "API: POST/GET /api/run",
+      "modules": [
+        "api/run route (gateway)",
+        "auth middleware",
+        "rate-limiter"
+      ],
+      "newModule": true,
+      "skills": [
+        "vercel:vercel-functions",
+        "vercel:vercel-firewall",
+        "vercel:routing-middleware",
+        "vercel:auth"
+      ],
+      "deps": [
+        "F18"
+      ],
+      "wave": "P1",
+      "criticalPath": true,
+      "gates": {
+        "arch": false,
+        "security": true,
+        "live": true
+      },
+      "owner": null,
+      "risk": "High",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "X02",
+      "name": "Safe registry-only runtime",
+      "program": 2,
+      "surface": "Cloud",
+      "pillar": "Cloud",
+      "description": "Sandbox/@sparticuz/chromium; feasibility spike",
+      "valueWhy": "Phones/browsers can't run Playwright — this sandboxed runtime is the only way they run templates at all.",
+      "toolOrSurface": "sandboxed registry-only execution runtime",
+      "modules": [
+        "sandbox runtime",
+        "@sparticuz/chromium fallback",
+        "allowlist"
+      ],
+      "newModule": true,
+      "skills": [
+        "vercel:vercel-sandbox",
+        "vercel:vercel-functions",
+        "security-and-hardening"
+      ],
+      "deps": [
+        "F18",
+        "F15"
+      ],
+      "wave": "P1",
+      "criticalPath": true,
+      "gates": {
+        "arch": false,
+        "security": true,
+        "live": true
+      },
+      "owner": null,
+      "risk": "High",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "X03",
+      "name": "Durable jobs + heavy fallback",
+      "program": 2,
+      "surface": "Cloud",
+      "pillar": "Cloud",
+      "description": "Vercel Workflow; heavy→self-host message",
+      "valueWhy": "Multi-step/monitor flows exceed a single request's time budget; durable orchestration is required.",
+      "toolOrSurface": "durable workflow orchestration (Vercel Workflow)",
+      "modules": [
+        "workflow definitions",
+        "retry/pause-resume"
+      ],
+      "newModule": true,
+      "skills": [
+        "vercel:workflow"
+      ],
+      "deps": [
+        "X02"
+      ],
+      "wave": "P2",
+      "criticalPath": true,
+      "gates": {
+        "arch": false,
+        "security": true,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "X04",
+      "name": "Results delivery",
+      "program": 2,
+      "surface": "Cloud",
+      "pillar": "Cloud",
+      "description": "SSE/websocket + Expo push; ephemeral no-persist",
+      "valueWhy": "Results have to reach the user live (web) or later (mobile push) without the site staying open.",
+      "toolOrSurface": "SSE/websocket + Expo push delivery",
+      "modules": [
+        "SSE/ws handler",
+        "expo-push adapter"
+      ],
+      "newModule": true,
+      "skills": [
+        "vercel:vercel-functions",
+        "expo push"
+      ],
+      "deps": [
+        "X01"
+      ],
+      "wave": "P2",
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": true,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "X05",
+      "name": "Monitors service",
+      "program": 2,
+      "surface": "Cloud",
+      "pillar": "Cloud",
+      "description": "Cron + F02 diff + push-on-change",
+      "valueWhy": "Push-on-change monitors are the single biggest mobile consumer hook (price drop / restock / new filing).",
+      "toolOrSurface": "cron monitors service",
+      "modules": [
+        "cron jobs",
+        "F02 diff consumer",
+        "push notifier"
+      ],
+      "newModule": true,
+      "skills": [
+        "vercel:workflow",
+        "vercel cron"
+      ],
+      "deps": [
+        "X03",
+        "F02",
+        "F20"
+      ],
+      "wave": "P3",
+      "criticalPath": true,
+      "gates": {
+        "arch": false,
+        "security": true,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "X06",
+      "name": "Encrypted cookies + vault",
+      "program": 2,
+      "surface": "Cloud",
+      "pillar": "Cloud",
+      "description": "Per-user encrypted transit + optional vault",
+      "valueWhy": "User-supplied cookies are sensitive; encrypted transit + opt-in vault is the trust floor for auth templates.",
+      "toolOrSurface": "encrypted cookie transit + optional vault",
+      "modules": [
+        "cookie encryption",
+        "per-user vault store"
+      ],
+      "newModule": true,
+      "skills": [
+        "security-and-hardening",
+        "vercel:vercel-storage"
+      ],
+      "deps": [
+        "F13"
+      ],
+      "wave": "P2",
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": true,
+        "live": false
+      },
+      "owner": null,
+      "risk": "High",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "X07",
+      "name": "Registry mirror/cache DB",
+      "program": 2,
+      "surface": "Cloud",
+      "pillar": "Cloud",
+      "description": "Postgres mirror + sync for fast catalog",
+      "valueWhy": "A fast Postgres mirror avoids hitting the git registry on every browse/search request.",
+      "toolOrSurface": "Postgres registry mirror/cache",
+      "modules": [
+        "postgres schema",
+        "registry sync job"
+      ],
+      "newModule": true,
+      "skills": [
+        "vercel:vercel-storage",
+        "vercel:runtime-cache"
+      ],
+      "deps": [],
+      "wave": "P1",
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Low",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "M01",
+      "name": "Expo app scaffold",
+      "program": 2,
+      "surface": "Mobile",
+      "pillar": "Mobile",
+      "description": "iOS+Android, Expo Router, EAS, Clerk auth",
+      "valueWhy": "The native app shell every mobile screen and EAS build depends on.",
+      "toolOrSurface": "Expo app scaffold (Router, EAS, Clerk)",
+      "modules": [
+        "apps/mobile scaffold",
+        "expo-router",
+        "EAS config",
+        "Clerk auth"
+      ],
+      "newModule": true,
+      "skills": [
+        "expo-react-native-typescript",
+        "vercel:auth"
+      ],
+      "deps": [
+        "W01",
+        "W02"
+      ],
+      "wave": "P1",
+      "criticalPath": false,
+      "gates": {
+        "arch": true,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": false,
+        "S5": true
+      }
+    },
+    {
+      "id": "M02",
+      "name": "Mobile design system impl",
+      "program": 2,
+      "surface": "Mobile",
+      "pillar": "Mobile",
+      "description": "Native-look themed components",
+      "valueWhy": "A native-feeling (not webview) app is required for store approval and consumer trust.",
+      "toolOrSurface": "native themed component system",
+      "modules": [
+        "apps/mobile/theme",
+        "native components"
+      ],
+      "newModule": false,
+      "skills": [
+        "frontend-design",
+        "expo-react-native-typescript",
+        "ui-ux-pro-max"
+      ],
+      "deps": [
+        "W02",
+        "M01"
+      ],
+      "wave": "P1",
+      "criticalPath": false,
+      "gates": {
+        "arch": true,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": false,
+        "S5": false
+      }
+    },
+    {
+      "id": "M03",
+      "name": "Browse/registry screens",
+      "program": 2,
+      "surface": "Mobile",
+      "pillar": "Mobile",
+      "description": "Search/filter/badges/trending",
+      "valueWhy": "Mobile users need to find a template before they can run or monitor it.",
+      "toolOrSurface": "screen: Browse (registry search)",
+      "modules": [
+        "apps/mobile/screens/browse"
+      ],
+      "newModule": false,
+      "skills": [
+        "expo-react-native-typescript"
+      ],
+      "deps": [
+        "M02",
+        "X07"
+      ],
+      "wave": "P2",
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Low",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "M04",
+      "name": "Run screen + result views",
+      "program": 2,
+      "surface": "Mobile",
+      "pillar": "Mobile",
+      "description": "Inputs/cookies; JSON/table/image/share",
+      "valueWhy": "\"Run a community API from your phone\" is the platform's headline consumer capability.",
+      "toolOrSurface": "screen: Run (inputs + result views)",
+      "modules": [
+        "apps/mobile/screens/run",
+        "result views"
+      ],
+      "newModule": false,
+      "skills": [
+        "expo-react-native-typescript",
+        "dataviz"
+      ],
+      "deps": [
+        "M03",
+        "X01",
+        "X04"
+      ],
+      "wave": "P2",
+      "criticalPath": true,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "M05",
+      "name": "Monitors + push",
+      "program": 2,
+      "surface": "Mobile",
+      "pillar": "Mobile",
+      "description": "Subscribe + Expo push + notification handling",
+      "valueWhy": "Push-on-change monitors delivered to the phone — the consumer wedge described in the vision.",
+      "toolOrSurface": "screen: Monitors (subscribe + push)",
+      "modules": [
+        "apps/mobile/screens/monitors",
+        "push handler"
+      ],
+      "newModule": false,
+      "skills": [
+        "expo push",
+        "expo-react-native-typescript"
+      ],
+      "deps": [
+        "M04",
+        "X05"
+      ],
+      "wave": "P3",
+      "criticalPath": true,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": true
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": true,
+        "S10": true,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "M06",
+      "name": "Run history + account + cookies",
+      "program": 2,
+      "surface": "Mobile",
+      "pillar": "Mobile",
+      "description": "History; device-encrypted cookies",
+      "valueWhy": "Users need history + a safe place for their own cookies/credentials on-device.",
+      "toolOrSurface": "screen: History + Account",
+      "modules": [
+        "apps/mobile/screens/history",
+        "apps/mobile/screens/account",
+        "device cookie store"
+      ],
+      "newModule": false,
+      "skills": [
+        "expo-react-native-typescript",
+        "security-and-hardening"
+      ],
+      "deps": [
+        "M04",
+        "X06"
+      ],
+      "wave": "P3",
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": true,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Medium",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": true,
+        "S5": true
+      }
+    },
+    {
+      "id": "M07",
+      "name": "App-store prep",
+      "program": 2,
+      "surface": "Mobile",
+      "pillar": "Mobile",
+      "description": "Icons/splash/EAS submit; listing (fees = owner step)",
+      "valueWhy": "Required before either app store will accept a public listing.",
+      "toolOrSurface": "app-store assets + EAS submit config",
+      "modules": [
+        "app icons/splash",
+        "eas submit config",
+        "store listing"
+      ],
+      "newModule": false,
+      "skills": [
+        "expo-react-native-performance",
+        "ui-ux-pro-max:banner-design"
+      ],
+      "deps": [
+        "M01",
+        "M02",
+        "M03",
+        "M04",
+        "M05",
+        "M06"
+      ],
+      "wave": "P4",
+      "criticalPath": false,
+      "gates": {
+        "arch": false,
+        "security": false,
+        "live": false
+      },
+      "owner": null,
+      "risk": "Low",
+      "subtasksApplicable": {
+        "S0": true,
+        "S1": true,
+        "S3": true,
+        "S4": true,
+        "S6": true,
+        "S8": true,
+        "S9": true,
+        "S11": true,
+        "S7": false,
+        "S10": false,
+        "S2": false,
+        "S5": true
+      }
+    }
+  ]
+}
