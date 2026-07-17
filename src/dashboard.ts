@@ -11,6 +11,7 @@ import { buildUsageMarkdown, renderDocsPage, getUsagePath } from './usage.js';
 import { templatesWithSavedCookies, saveCookies } from './cookie-store.js';
 import { getProgress, reportDashboardStatus } from './progress.js';
 import type { Scheduler, ScheduledJob } from './scheduler.js';
+import type { DashboardSection } from './dashboard-sections/types.js';
 
 const DASHBOARD_PORT = 3000;
 const LOGS_DIR = path.resolve(process.cwd(), 'output', 'logs');
@@ -187,18 +188,18 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --void: #14100a;
-    --panel: #1e1811;
-    --panel-2: #241d14;
-    --line: #3a2f1f;
-    --phosphor: #ffb627;
-    --phosphor-dim: #8a5a1e;
+    --void: #0d0d10;
+    --panel: #17181d;
+    --panel-2: #1c1e24;
+    --line: #262932;
+    --accent: #3f6fb8;
+    --accent-dim: #5d7599;
     --ok: #7fd858;
     --err: #ff5f56;
     --paper: #f0e6d2;
     --ink: #2a2015;
-    --text: #d8c9a8;
-    --text-dim: #7a6a4e;
+    --text: #e4e9f2;
+    --text-dim: #6c7a91;
   }
   * { box-sizing: border-box; }
   body {
@@ -210,7 +211,7 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
   }
   .mono { font-family: 'IBM Plex Mono', monospace; }
   .dim { color: var(--text-dim); }
-  a { color: var(--phosphor); }
+  a { color: var(--accent); }
 
   .chrome {
     display: flex;
@@ -224,7 +225,31 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
   .dot.on { background: var(--ok); }
   .dot.off { background: var(--err); }
   .chrome-title { font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; color: var(--text-dim); margin-left: 0.5rem; }
-  .chrome-title b { color: var(--phosphor); font-weight: 600; }
+  .chrome-title b { color: var(--accent); font-weight: 600; }
+
+  .tile-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.6rem; padding: 1rem; max-width: 1080px; margin: 0 auto;
+  }
+  .tile {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+    padding: 0.7rem 0.8rem; cursor: pointer; font-family: 'IBM Plex Mono', monospace;
+    transition: border-color 0.15s ease;
+  }
+  .tile:hover { border-color: var(--accent-dim); }
+  .tile.selected { border-color: var(--accent); }
+  .tile-label { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); display: flex; align-items: center; gap: 0.4rem; }
+  .tile-glance { font-size: 1.05rem; color: var(--text); margin-top: 0.3rem; }
+  .tile-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+  .tile-dot.ok { background: var(--ok); }
+  .tile-dot.alert { background: var(--err); }
+  .tile-dot.pulse { background: var(--ok); animation: tile-pulse 1.8s ease-out infinite; }
+  @keyframes tile-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(127,216,88,0.5); }
+    70% { box-shadow: 0 0 0 7px rgba(127,216,88,0); }
+    100% { box-shadow: 0 0 0 0 rgba(127,216,88,0); }
+  }
+  #detail-area { max-width: 1080px; margin: 0 auto; padding: 0 1rem 4rem; }
 
   main {
     max-width: 1080px;
@@ -238,7 +263,7 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
     font-size: 0.75rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--phosphor-dim);
+    color: var(--accent-dim);
     margin: 0 0 0.6rem;
     padding-bottom: 0.4rem;
     border-bottom: 1px solid var(--line);
@@ -250,7 +275,7 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
   .row { padding: 0.75rem 1rem; border-bottom: 1px solid var(--line); }
   .row:last-child { border-bottom: none; }
   .row-main { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
-  .id { color: var(--phosphor); font-weight: 600; }
+  .id { color: var(--accent); font-weight: 600; }
   .domain { color: var(--text); }
   .fixed-badge { color: var(--ok); font-size: 0.75rem; }
   .kind-badge { color: var(--text-dim); font-size: 0.75rem; }
@@ -262,13 +287,13 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
     flex: 1; min-width: 0; padding: 0.45rem 0.6rem; background: var(--void);
     border: 1px solid var(--line); border-radius: 2px; color: var(--text); font-size: 0.85rem;
   }
-  .url-input:focus-visible { outline: 2px solid var(--phosphor); outline-offset: 1px; }
+  .url-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .row-qa { display: flex; gap: 0.5rem; margin-top: 0.4rem; flex-wrap: wrap; align-items: center; }
   .proxy-input, .cookie-input {
     flex: 1; min-width: 160px; padding: 0.4rem 0.6rem; background: var(--void);
     border: 1px solid var(--line); border-radius: 2px; color: var(--text-dim); font-size: 0.78rem;
   }
-  .proxy-input:focus-visible, .cookie-input:focus-visible { outline: 2px solid var(--phosphor); outline-offset: 1px; }
+  .proxy-input:focus-visible, .cookie-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .bandwidth-label { display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; }
   .cookie-container { position: relative; flex: 1; min-width: 160px; }
   .cookie-container .cookie-input { width: 100%; padding-right: 1.8rem; }
@@ -277,7 +302,7 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
     color: var(--text-dim); cursor: pointer; font-size: 0.9rem; line-height: 1;
     user-select: none; transition: color 0.15s ease;
   }
-  .info-btn:hover { color: var(--phosphor); }
+  .info-btn:hover { color: var(--accent); }
   .cookie-instructions {
     display: none; margin-top: 0.4rem; padding: 0.6rem 0.7rem; background: var(--void);
     border: 1px solid var(--line); border-radius: 2px; font-size: 0.72rem; line-height: 1.5;
@@ -288,20 +313,20 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
     border-radius: 2px; color: var(--text);
   }
   .btn {
-    background: transparent; border: 1px solid var(--phosphor-dim); color: var(--phosphor);
+    background: transparent; border: 1px solid var(--accent-dim); color: var(--accent);
     padding: 0.45rem 1rem; border-radius: 2px; cursor: pointer; font-family: 'IBM Plex Mono', monospace;
     font-size: 0.8rem; font-weight: 600;
   }
-  .btn:hover { background: var(--phosphor); color: var(--ink); }
-  .btn:disabled { opacity: 0.4; cursor: default; background: none; color: var(--phosphor); }
-  .btn:focus-visible { outline: 2px solid var(--phosphor); outline-offset: 2px; }
+  .btn:hover { background: var(--accent); color: var(--ink); }
+  .btn:disabled { opacity: 0.4; cursor: default; background: none; color: var(--accent); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .watch-btn { border-color: var(--ok); color: var(--ok); flex-shrink: 0; }
   .watch-btn:hover:not(:disabled) { background: var(--ok); color: var(--ink); }
   .watch-btn:disabled { color: var(--ok); }
   .cookie-btn { border-color: var(--ok); color: var(--ok); flex-shrink: 0; }
   .cookie-btn:hover:not(:disabled) { background: var(--ok); color: var(--ink); }
   .docs-btn { text-decoration: none; flex-shrink: 0; display: inline-flex; align-items: center; }
-  .docs-btn:hover { background: var(--phosphor); color: var(--ink); }
+  .docs-btn:hover { background: var(--accent); color: var(--ink); }
   .result:empty { display: none; }
   .result {
     margin: 0.6rem 0 0; padding: 0.6rem; background: var(--void); border-radius: 2px;
@@ -317,11 +342,11 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
   }
   .tick { padding: 0.15rem 0; border-bottom: 1px dotted var(--line); display: flex; gap: 0.6rem; }
   .tick .ts { margin-left: 0; flex-shrink: 0; }
-  .tick.running .status { color: var(--phosphor); }
+  .tick.running .status { color: var(--accent); }
   .tick.done .status { color: var(--ok); }
   .tick.failed .status { color: var(--err); }
-  .cursor { display: inline-block; width: 7px; background: var(--phosphor); animation: blink 1s step-end infinite; }
-  @media (prefers-reduced-motion: reduce) { .cursor { animation: none; opacity: 1; } }
+  .cursor { display: inline-block; width: 7px; background: var(--accent); animation: blink 1s step-end infinite; }
+  @media (prefers-reduced-motion: reduce) { .cursor, .tile-dot.pulse { animation: none; opacity: 1; } }
   @keyframes blink { 50% { opacity: 0; } }
 
   /* stats - printout panel */
@@ -335,10 +360,10 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
 
   /* crontab table */
   table.crontab { width: 100%; border-collapse: collapse; font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; }
-  table.crontab th { text-align: left; color: var(--phosphor-dim); font-weight: 600; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--line); font-size: 0.7rem; letter-spacing: 0.06em; }
+  table.crontab th { text-align: left; color: var(--accent-dim); font-weight: 600; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--line); font-size: 0.7rem; letter-spacing: 0.06em; }
   table.crontab td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--line); }
   table.crontab tr:last-child td { border-bottom: none; }
-  .cron-field { color: var(--phosphor); }
+  .cron-field { color: var(--accent); }
 
   form.job-form { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.85rem 1rem; border-top: 1px solid var(--line); }
   form.job-form input { flex: 1; min-width: 140px; }
@@ -360,55 +385,12 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
   <span class="chrome-title"><b>APImeMCP</b> — compiler pattern extraction control</span>
 </div>
 
-<main>
-  <section>
-    <h2>Templates</h2>
-    <div class="panel" id="templates-panel">
-      ${templateRows || '<div class="empty">No templates registered yet. Use register_extraction_template.</div>'}
-    </div>
-  </section>
-
-  <section>
-    <h2>Activity</h2>
-    <div class="panel" id="ticker"></div>
-  </section>
-
-  <section>
-    <h2>Extraction stats</h2>
-    <div class="printout" id="stats">
-      <table class="crontab">
-        <thead><tr><th>template</th><th>runs</th><th>success rate</th><th>p95 latency</th><th>drift</th><th>last run</th></tr></thead>
-        <tbody><tr><td colspan="6" class="empty">No extraction measures yet.</td></tr></tbody>
-      </table>
-    </div>
-  </section>
-
-  <section>
-    <h2>Scheduled jobs</h2>
-    <div class="panel">
-      <table class="crontab">
-        <thead>
-          <tr><th>min</th><th>hr</th><th>dom</th><th>mon</th><th>dow</th><th>target</th><th>template</th></tr>
-        </thead>
-        <tbody id="jobs-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
-      </table>
-      <form class="job-form" id="job-form">
-        <input type="text" name="targetUrl" placeholder="https://example.com/page" required />
-        <input type="text" name="templateId" placeholder="templateId (optional)" />
-        <input type="text" name="cronExpression" placeholder="0 * * * * (min hr dom mon dow)" required />
-        <button type="submit" class="btn">Schedule</button>
-      </form>
-      <div class="form-status" id="job-form-status"></div>
-    </div>
-  </section>
-
-  <section>
-    <h2>Forensic captures</h2>
-    <div class="panel" id="logs-body">
-      <div class="empty">Loading…</div>
-    </div>
-  </section>
-</main>
+<div class="tile-grid" id="tile-grid"></div>
+<section style="max-width:1080px;margin:0 auto;padding:0 1rem">
+  <h2>Activity</h2>
+  <div class="panel" id="ticker"></div>
+</section>
+<div id="detail-area"></div>
 
 <script>
 function toggleInfo(btn) {
@@ -468,92 +450,6 @@ async function pollProgress() {
     while (ticker.children.length > 40) ticker.removeChild(ticker.lastChild);
   } catch {
     // dashboard poll failures are non-fatal, just skip this tick
-  }
-}
-
-async function pollStats() {
-  try {
-    const res = await fetch('/api/stats');
-    const payload = await res.json();
-    const body = document.querySelector('#stats tbody');
-    if (!payload.templates.length) return;
-    body.innerHTML = payload.templates.map(function (sla) {
-      return '<tr data-template-id="' + sla.templateId + '"><td>' + sla.templateId + '</td><td>' + sla.runs + '</td><td>' +
-        Math.round(sla.successRate * 100) + '%</td><td>' + Math.round(sla.p95DurationMs) +
-        ' ms</td><td data-drift-count="' + sla.driftCount + '">' + sla.driftCount + (sla.lastDriftAt ? ' (last ' + new Date(sla.lastDriftAt).toLocaleString() + ')' : '') +
-        (sla.driftEntries?.length ? '<br><span class="dim">' + sla.driftEntries.map(function (entry) { return entry.kind + ':' + entry.path; }).join(', ') + '</span>' : '') +
-        '</td><td>' + new Date(sla.lastRunAt).toLocaleString() + '</td></tr>';
-    }).join('');
-  } catch {
-    // non-fatal
-  }
-}
-
-async function loadJobs() {
-  const body = document.getElementById('jobs-body');
-  try {
-    const res = await fetch('/api/jobs');
-    const jobs = await res.json();
-    if (!jobs.length) {
-      body.innerHTML = '<tr><td colspan="7" class="empty">No scheduled jobs yet.</td></tr>';
-      return;
-    }
-    body.innerHTML = jobs.map(function (j) {
-      var parts = j.cronExpression.trim().split(/\\s+/);
-      while (parts.length < 5) parts.push('*');
-      return '<tr>' + parts.slice(0, 5).map(function (p) { return '<td class="cron-field">' + p + '</td>'; }).join('') +
-        '<td>' + j.targetUrl + '</td><td>' + (j.templateId || '<span class="dim">auto</span>') + '</td></tr>';
-    }).join('');
-  } catch {
-    body.innerHTML = '<tr><td colspan="7" class="empty">Could not load jobs.</td></tr>';
-  }
-}
-
-document.getElementById('job-form').addEventListener('submit', async function (e) {
-  e.preventDefault();
-  const form = e.target;
-  const status = document.getElementById('job-form-status');
-  const payload = {
-    targetUrl: form.targetUrl.value.trim(),
-    cronExpression: form.cronExpression.value.trim(),
-    templateId: form.templateId.value.trim() || undefined,
-  };
-  status.textContent = 'Scheduling...';
-  try {
-    const res = await fetch('/api/jobs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      status.textContent = 'Error: ' + (data.error || 'could not schedule job');
-      return;
-    }
-    status.textContent = 'Scheduled ' + data.jobId;
-    form.reset();
-    loadJobs();
-  } catch (err) {
-    status.textContent = 'Request failed: ' + err.message;
-  }
-});
-
-async function loadLogs() {
-  const el = document.getElementById('logs-body');
-  try {
-    const res = await fetch('/api/logs');
-    const logs = await res.json();
-    if (!logs.length) {
-      el.innerHTML = '<div class="empty">No failures captured yet — that\\'s a good sign.</div>';
-      return;
-    }
-    el.innerHTML = logs.map(function (l) {
-      return '<div class="log-item"><span class="mono dim">' + l.prefix + '</span>' +
-        (l.screenshotUrl ? '<a href="' + l.screenshotUrl + '" target="_blank">screenshot</a>' : '') +
-        (l.domUrl ? '<a href="' + l.domUrl + '" target="_blank">dom</a>' : '') + '</div>';
-    }).join('');
-  } catch {
-    el.innerHTML = '<div class="empty">Could not load logs.</div>';
   }
 }
 
@@ -620,14 +516,43 @@ async function loadTemplates() {
   }
 }
 
+async function refreshTileSummary() {
+  try {
+    const res = await fetch('/api/dashboard-summary');
+    const tiles = await res.json();
+    const grid = document.getElementById('tile-grid');
+    grid.innerHTML = tiles.map(function (t) {
+      return '<div class="tile" data-section="' + t.id + '" onclick="selectSection(\\'' + t.id + '\\')">' +
+        '<div class="tile-label"><span class="tile-dot ' + t.dotState + '"></span>' + t.label + '</div>' +
+        '<div class="tile-glance">' + t.glance + '</div></div>';
+    }).join('');
+    const selected = document.querySelector('.tile[data-section="' + currentSection + '"]');
+    if (selected) selected.classList.add('selected');
+  } catch {
+    // non-fatal, keep showing last known tiles
+  }
+}
+
+let currentSection = 'templates';
+async function selectSection(id) {
+  currentSection = id;
+  document.querySelectorAll('.tile').forEach(function (t) { t.classList.toggle('selected', t.dataset.section === id); });
+  const area = document.getElementById('detail-area');
+  area.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const res = await fetch('/api/section/' + id);
+    area.innerHTML = await res.text();
+    if (typeof window['init_' + id] === 'function') window['init_' + id]();
+  } catch (err) {
+    area.innerHTML = '<div class="empty">Could not load: ' + err.message + '</div>';
+  }
+}
+
 pollProgress();
-pollStats();
-loadJobs();
-loadLogs();
-loadTemplates();
+refreshTileSummary();
+selectSection(currentSection);
 setInterval(pollProgress, 2000);
-setInterval(pollStats, 5000);
-setInterval(loadTemplates, 5000);
+setInterval(refreshTileSummary, 5000);
 </script>
 </body>
 </html>`;
@@ -717,6 +642,26 @@ export function startDashboard(deps: DashboardDeps): void {
   app.get('/api/templates', async (_req, res) => {
     const cookieSet = await templatesWithSavedCookies();
     res.json(Object.values(await loadManifest()).map((e) => ({ ...e, hasSavedCookies: cookieSet.has(e.templateId) })));
+  });
+
+  // Populated by the integration task once all section modules exist.
+  const sections: Record<string, DashboardSection> = {};
+
+  app.get('/api/dashboard-summary', async (_req, res) => {
+    const summaries = await Promise.all(Object.values(sections).map((s) => s.getTileSummary(deps)));
+    res.json(summaries);
+  });
+
+  app.get('/api/section/:id', async (req, res) => {
+    const section = sections[req.params.id];
+    if (!section) {
+      res.status(404).type('text/plain').send('Unknown section: ' + req.params.id);
+      return;
+    }
+    // Each section registers its own GET /api/section/<id> handler via registerRoutes;
+    // this fallback only fires if a section forgets to. Individual sections own their
+    // panel rendering, not this shared route.
+    res.status(501).type('text/plain').send('Section "' + req.params.id + '" has not registered a panel route');
   });
 
   // CORS is scoped to just this one route: it's the only endpoint an external
