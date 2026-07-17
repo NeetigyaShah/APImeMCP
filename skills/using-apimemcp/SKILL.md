@@ -168,3 +168,24 @@ single most common source of a wrong-on-first-try template.
 - Registering a second template for a domain that already has one and expecting
   the first to still auto-match by URL (it won't — pass explicit `templateId`).
 - Building a full dashboard/viewer page when the user just wanted data back.
+
+## Transforms
+
+Use the optional `transform` field on `register_extraction_template` to normalize
+returned `data`. Preview a candidate spec with `preview_transform` before attaching it.
+
+```json
+{
+  "version": 1,
+  "ops": [
+    { "op": "rename", "from": "raw_price", "to": "price" },
+    { "op": "coerce", "field": "price", "to": "number" },
+    { "op": "pick", "fields": ["name", "price"] }
+  ]
+}
+```
+
+Operations run in order. `pick` keeps named fields, `rename` changes one key,
+`coerce` supports `string`, `number`, `boolean`, and ISO-8601 `date`, and `map`
+applies `pick`/`rename`/`coerce` to each array element. Malformed specs and failed
+coercions are reported as catchable tool errors.

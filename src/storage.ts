@@ -67,6 +67,7 @@ export async function registerTemplate(
       scriptPath: path.join('templates', scriptFileName),
       ...(input.fixedTargetUrl ? { fixedTargetUrl: input.fixedTargetUrl } : {}),
       ...(input.outputSchema ? { outputSchema: input.outputSchema } : {}),
+      ...(input.transform ? { transform: input.transform } : {}),
       ...(input.waitStrategy ? { waitStrategy: input.waitStrategy } : {}),
       ...(input.readySelector ? { readySelector: input.readySelector } : {}),
       ...(input.source ? { source: input.source } : {}),

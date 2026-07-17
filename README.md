@@ -333,9 +333,37 @@ Save a reusable extraction script for a domain.
 | `waitStrategy` | `'domcontentloaded'\|'load'\|'networkidle'`, optional | how long to wait after navigation before running the script. Omit it and new templates default to the fast `domcontentloaded`; templates registered before this field existed were migrated to explicit `networkidle` (their original behavior) so nothing broke retroactively. Set `networkidle` explicitly if a page populates its data asynchronously after the initial HTML loads (e.g. a paginated grid) and `readySelector` isn't a better fit. |
 | `readySelector` | string, optional | wait for this selector to appear before running the script — a more precise alternative to `networkidle` when you know exactly what element indicates "the data is ready." |
 | `outputSchema` | JSON Schema object, optional | contract for the extraction result's `data`. Runs validate against it and report `schemaValidation`; omit it to preserve pre-contract behavior. |
+| `transform` | Transform spec, optional | normalizes `data` after extraction with ordered `pick`, `rename`, `coerce`, and `map` operations. |
 
 Returns the saved `{ templateId, domainPattern, scriptPath, fixedTargetUrl?, waitStrategy?, readySelector?, outputSchema?, createdAt, updatedAt }`.
 Re-registering an existing `templateId` with the same script but a new `waitStrategy`/`readySelector` updates just that setting (upsert semantics).
+
+### `preview_transform`
+
+Preview a JSON transform without registering a template. The spec is versioned and
+applies operations in order. `pick` keeps named fields, `rename` changes a field name,
+`coerce` converts a field to `string`, `number`, `boolean`, or an ISO-8601 `date`, and
+`map` applies `pick`/`rename`/`coerce` to every element of an array.
+
+```js
+await client.callTool({
+  name: 'preview_transform',
+  arguments: {
+    sampleData: { prod_name: 'Widget', raw_price: '19.99', _debug: 'x' },
+    spec: { version: 1, ops: [
+      { op: 'rename', from: 'raw_price', to: 'price' },
+      { op: 'coerce', field: 'price', to: 'number' },
+      { op: 'pick', fields: ['prod_name', 'price'] },
+      { op: 'rename', from: 'prod_name', to: 'name' },
+    ] },
+  },
+});
+// { "name": "Widget", "price": 19.99 }
+```
+
+Attach the same `spec` as `transform` when registering a template; future
+`execute_native_extraction` results return the normalized `data` shape. Invalid
+coercions return a catchable tool error instead of silently changing the value.
 
 By default, `execute_native_extraction` also blocks images/media/fonts/CSS for extraction
 templates (not for recorded/action-sequence ones) to speed up runs — pass

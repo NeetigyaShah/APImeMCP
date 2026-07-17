@@ -30,6 +30,7 @@ import { registerBatchDownloadAssetsTool } from './tools/batch-download-assets-t
 import { registerAddCommunityTemplateTool } from './tools/add-community-template-tool.js';
 import { registerConnectAppTool, registerConfirmAppConnectionTool, registerListAppConnectionsTool } from './tools/app-connections-tools.js';
 import { registerSynthesizeSchemaTool } from './tools/synthesize-schema.js';
+import { registerPreviewTransformTool } from './tools/transform-tool.js';
 
 let updateStatus: UpdateStatus = { updateAvailable: false, latestCommit: null };
 
@@ -103,6 +104,7 @@ registerSendNotificationTool(server, deps);
 registerBatchDownloadAssetsTool(server, deps);
 registerAddCommunityTemplateTool(server, deps);
 registerSynthesizeSchemaTool(server, deps.engine);
+registerPreviewTransformTool(server, {});
 
 server.registerPrompt('get_environment_context', {
   title: 'Environment Context',

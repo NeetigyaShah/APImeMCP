@@ -1,7 +1,9 @@
 import type { ActionSequence, ExtractionResult, Manifest, ManifestEntry, RunKind } from '../types.js';
 import type { ExecuteActionSequenceOptions, ExecuteExtractionOptions } from '../engine.js';
+<<<<<<< HEAD
 import { checkDrift } from '../drift.js';
 import type { DriftReport } from '../drift.js';
+import { applyTransform } from '../transform.js';
 
 export interface ExtractionRunnerDeps {
   loadManifest: () => Promise<Manifest>;
@@ -132,7 +134,8 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
         return { driftDetected: drift.hasDrift, driftEntryCount: drift.entries.length, driftEntries: drift.entries };
       });
       await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
-      return deps.createSuccessfulResult(data, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema, drift);
+      const transformedData = entry.transform ? applyTransform(data, entry.transform) : data;
+      return deps.createSuccessfulResult(transformedData, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema, drift);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!measurementStarted) {

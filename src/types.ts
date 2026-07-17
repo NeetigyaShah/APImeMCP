@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import type { ValidationResult } from './schema.js';
+<<<<<<< HEAD
 import type { DriftEntry, DriftReport } from './drift.js';
+import { TransformSpecSchema } from './transform.js';
+import type { TransformSpec } from './transform.js';
 
 export type { ValidationResult } from './schema.js';
 
@@ -49,6 +52,7 @@ export const RegisterExtractionTemplateShape = {
   // blanket cost.
   readySelector: z.string().optional(),
   outputSchema: z.record(z.unknown()).optional(),
+  transform: TransformSpecSchema.optional(),
 };
 
 export const RegisterExtractionTemplateInputSchema = z.object(RegisterExtractionTemplateShape);
@@ -186,6 +190,7 @@ export interface ManifestEntry {
   waitStrategy?: WaitStrategy;
   readySelector?: string;
   outputSchema?: Record<string, unknown>;
+  transform?: TransformSpec;
   // System-assigned, NOT part of the public register_extraction_template tool's input
   // schema (a caller can't just claim 'local' to escape the sandbox) - set only by
   // registry-client.ts's addFromRegistry(). 'registry' templates get a network
