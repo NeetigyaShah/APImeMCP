@@ -28,6 +28,7 @@
 - F14 G2 rejected `d860680`: unknown-template failures return before `executeMeasured`, so no JSONL SLA measurement exists and the calculated success rate is biased. A fresh F14 repair builder is required.
 - F01 final G3 rejected `b4decfe`: while schema validation is now at the engine boundary, `src/index.ts` still owns extraction orchestration and inline tool handlers. This exposes the uncompleted ADR-02 Wave 0 boundary; a fresh F01 architecture-repair builder is required.
 - F22 G2 rejected `9109a2d`: its discovery registration passes an inline dependency object instead of appending dependencies to the single shared `deps` object, violating ADR-02. A fresh F22 repair builder is required.
+- Sequencing note: F05 and F03 merged before blocked F01, despite the DAG's preferred Wave 1 foundation order. Neither declares a hard F01 dependency and both merge-result gates passed; F01 remains the next required Wave 1 foundation before F14/F19 integration. F22 is Wave 2 and remains unmerged pending F02.
 
 ## Agent Failures
 
