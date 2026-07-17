@@ -43,6 +43,7 @@ import { reportProgress } from './progress.js';
 import { checkForUpdates } from './updater.js';
 import type { UpdateStatus } from './updater.js';
 import { startDashboard } from './dashboard.js';
+import { validateOutput } from './schema.js';
 import { getAppConnection, listAppConnections, upsertAppConnection } from './app-connections.js';
 import {
   registerConnectAppTool,
@@ -178,10 +179,13 @@ export async function runExtraction(
       });
       await logExtractionMetric(entry.templateId, resolvedUrl, 0);
       await reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
+      const data = { completedSteps: sequence.steps.length };
+      const schemaValidation = entry.outputSchema ? validateOutput(data, entry.outputSchema) : undefined;
       return {
         success: true,
-        data: { completedSteps: sequence.steps.length },
+        data,
         meta: buildMeta(entry.templateId, entry.domainPattern, resolvedUrl),
+        ...(schemaValidation ? { schemaValidation } : {}),
       };
     }
 
@@ -214,7 +218,13 @@ export async function runExtraction(
     const imageCount = Array.isArray(data) ? data.length : data ? 1 : 0;
     await logExtractionMetric(entry.templateId, resolvedUrl, imageCount);
     await reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
-    return { success: true, data, meta: buildMeta(entry.templateId, entry.domainPattern, resolvedUrl) };
+    const schemaValidation = entry.outputSchema ? validateOutput(data, entry.outputSchema) : undefined;
+    return {
+      success: true,
+      data,
+      meta: buildMeta(entry.templateId, entry.domainPattern, resolvedUrl),
+      ...(schemaValidation ? { schemaValidation } : {}),
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logError(`execute_native_extraction failed: ${message}`);

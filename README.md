@@ -324,8 +324,9 @@ Save a reusable extraction script for a domain.
 | `fixedTargetUrl` | string, optional | for a template that always targets the same page (e.g. "today's deals") — set this and `execute_native_extraction` can omit `targetUrl` entirely. Marked with a ★ badge in the dashboard. |
 | `waitStrategy` | `'domcontentloaded'\|'load'\|'networkidle'`, optional | how long to wait after navigation before running the script. Omit it and new templates default to the fast `domcontentloaded`; templates registered before this field existed were migrated to explicit `networkidle` (their original behavior) so nothing broke retroactively. Set `networkidle` explicitly if a page populates its data asynchronously after the initial HTML loads (e.g. a paginated grid) and `readySelector` isn't a better fit. |
 | `readySelector` | string, optional | wait for this selector to appear before running the script — a more precise alternative to `networkidle` when you know exactly what element indicates "the data is ready." |
+| `outputSchema` | JSON Schema object, optional | contract for the extraction result's `data`. Runs validate against it and report `schemaValidation`; omit it to preserve pre-contract behavior. |
 
-Returns the saved `{ templateId, domainPattern, scriptPath, fixedTargetUrl?, waitStrategy?, readySelector?, createdAt, updatedAt }`.
+Returns the saved `{ templateId, domainPattern, scriptPath, fixedTargetUrl?, waitStrategy?, readySelector?, outputSchema?, createdAt, updatedAt }`.
 Re-registering an existing `templateId` with the same script but a new `waitStrategy`/`readySelector` updates just that setting (upsert semantics).
 
 By default, `execute_native_extraction` also blocks images/media/fonts/CSS for extraction
@@ -364,10 +365,8 @@ Run a registered template against a URL.
 | `executableScript` | non-empty string, optional | inline script for a non-persistent dry-run. When present, it bypasses template lookup and returns `dryRun: true`; an explicitly empty value is rejected. |
 | `outputSchema` | JSON Schema object, optional | draft schema validated when the optional schema validator is available; otherwise omitted without failing the dry-run. |
 
-Returns `{ success, data?, error?, meta: { url, templateId, domainMatched, durationMs, timestamp } }`.
-Registered-template runs automatically append a row to `templates/extraction_metrics.csv`;
-dry-runs persist neither metrics nor any other storage state.
-(see `get_extraction_stats` below) — no separate step required.
+Returns `{ success, data?, error?, meta: { url, templateId, domainMatched, durationMs, timestamp }, schemaValidation? }`. `schemaValidation` is present only when the template declares `outputSchema`, and contains `{ valid, errors? }`.
+Registered-template runs automatically append a row to `templates/extraction_metrics.csv` (see `get_extraction_stats` below) — no separate step required; dry-runs persist neither metrics nor any other storage state.
 
 If the resolved template was registered as an **action-sequence** (via the recorder
 extension's `/api/recordings` endpoint, not `register_extraction_template`), this

@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import type { ValidationResult } from './schema.js';
+
+export type { ValidationResult } from './schema.js';
 
 const TEMPLATE_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -44,6 +47,7 @@ export const RegisterExtractionTemplateShape = {
   // the script - the precise way to wait for "the data I need" without paying networkidle's
   // blanket cost.
   readySelector: z.string().optional(),
+  outputSchema: z.record(z.unknown()).optional(),
 };
 
 export const RegisterExtractionTemplateInputSchema = z.object(RegisterExtractionTemplateShape);
@@ -180,6 +184,7 @@ export interface ManifestEntry {
   // templates registered before this field existed all take that fallback.
   waitStrategy?: WaitStrategy;
   readySelector?: string;
+  outputSchema?: Record<string, unknown>;
   // System-assigned, NOT part of the public register_extraction_template tool's input
   // schema (a caller can't just claim 'local' to escape the sandbox) - set only by
   // registry-client.ts's addFromRegistry(). 'registry' templates get a network
@@ -205,4 +210,5 @@ export interface ExtractionResult {
   data?: unknown;
   error?: string;
   meta: ExtractionMeta;
+  schemaValidation?: ValidationResult;
 }

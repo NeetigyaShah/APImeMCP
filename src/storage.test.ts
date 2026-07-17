@@ -80,6 +80,23 @@ describe('registerTemplate', () => {
     expect(scriptContent).toBe('v2');
   });
 
+  it('persists an optional outputSchema unchanged', async () => {
+    const outputSchema = {
+      type: 'object',
+      required: ['title'],
+      properties: { title: { type: 'string' } },
+    };
+
+    await registerTemplate({
+      templateId: 'schema-contract',
+      domainPattern: 'example.com',
+      executableScript: '(() => ({ title: document.title }))()',
+      outputSchema,
+    });
+
+    expect((await loadManifest())['schema-contract'].outputSchema).toEqual(outputSchema);
+  });
+
   it('keeps both entries when they share a domainPattern (N:1 domain-to-template support)', async () => {
     await registerTemplate({ templateId: 'old', domainPattern: 'shared.com', executableScript: 'old' });
     await registerTemplate({ templateId: 'new', domainPattern: 'shared.com', executableScript: 'new' });

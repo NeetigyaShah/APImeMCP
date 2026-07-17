@@ -36,6 +36,28 @@ describe('RegisterExtractionTemplateInputSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts an optional JSON Schema output contract', () => {
+    const result = RegisterExtractionTemplateInputSchema.safeParse({
+      templateId: 'product-title',
+      domainPattern: 'example.com',
+      executableScript: '(() => ({ title: document.title }))()',
+      outputSchema: {
+        type: 'object',
+        required: ['title'],
+        properties: { title: { type: 'string' } },
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.outputSchema).toEqual({
+        type: 'object',
+        required: ['title'],
+        properties: { title: { type: 'string' } },
+      });
+    }
+  });
 });
 
 describe('ExecuteNativeExtractionInputSchema', () => {
