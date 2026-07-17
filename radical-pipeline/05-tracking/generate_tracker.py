@@ -119,7 +119,11 @@ def style_header(ws, ncols, row=1):
 
 
 def pct_complete(feature, status):
-    applicable = [k for k in S_KEYS if feature["subtasksApplicable"].get(k)]
+    applicable = [
+        k for k in S_KEYS
+        if feature["subtasksApplicable"].get(k)
+        and status.get("subtasks", {}).get(k, "N/A") != "N/A"
+    ]
     if not applicable:
         return 0.0
     done = sum(1 for k in applicable if status.get("subtasks", {}).get(k) in ("Done",))
