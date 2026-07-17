@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>F09 Write Form Fixture</title>
+</head>
+<body>
+    <h1>Contact Form Fixture</h1>
+    <form id="contact-form">
+        <input type="text" id="full_name" name="full_name" required>
+        <input type="email" id="email" name="email" required>
+        <button type="submit">Submit</button>
+    </form>
+    <div id="status" style="display: none;"></div>
+    <script>
+        document.getElementById('contact-form').addEventListener('submit', (event) => {
+            event.preventDefault();
+            const name = document.getElementById('full_name').value;
+            const email = document.getElementById('email').value;
+            document.getElementById('contact-form').style.display = 'none';
+            document.getElementById('status').textContent = `Submitted: ${name} <${email}>`;
+            document.getElementById('status').style.display = 'block';
+        });
+    </script>
+</body>
+</html>

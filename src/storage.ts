@@ -73,6 +73,9 @@ export async function registerTemplate(
       ...(input.source ? { source: input.source } : {}),
       ...(input.contributedBy ? { contributedBy: input.contributedBy } : {}),
       ...(input.allowedDomains ? { allowedDomains: input.allowedDomains } : {}),
+      ...(input.templateKind ? { templateKind: input.templateKind } : {}),
+      ...(input.writeScript ? { writeScript: input.writeScript } : {}),
+      ...(input.writeInputSchema ? { writeInputSchema: input.writeInputSchema } : {}),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
