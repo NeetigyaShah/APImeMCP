@@ -35,6 +35,10 @@ try {
     name: 'execute_native_extraction',
     arguments: { templateId: 'f14-metrics', targetUrl: 'http://127.0.0.1:1/' },
   });
+  const unknownTemplateRun = await client.callTool({
+    name: 'execute_native_extraction',
+    arguments: { templateId: 'missing-f14-template' },
+  });
   const statsResult = await client.callTool({ name: 'get_extraction_stats', arguments: {} });
   const metrics = (await readFile(path.join(tempDir, 'templates', 'extraction_metrics.jsonl'), 'utf8'))
     .trim()
@@ -44,12 +48,21 @@ try {
   const sla = stats.templates.find((item) => item.templateId === 'f14-metrics');
   const success = JSON.parse(successfulRun.content[0].text);
   const failure = JSON.parse(failedRun.content[0].text);
+  const unknownTemplateFailure = JSON.parse(unknownTemplateRun.content[0].text);
   const ok =
     success.success === true &&
     failure.success === false &&
-    metrics.length === 2 &&
+    unknownTemplateFailure.success === false &&
+    metrics.length === 3 &&
     metrics.some((item) => item.success === true && item.durationMs > 0) &&
     metrics.some((item) => item.success === false && item.durationMs > 0 && item.error) &&
+    metrics.some(
+      (item) =>
+        item.templateId === 'missing-f14-template' &&
+        item.kind === 'extraction' &&
+        item.success === false &&
+        item.error === 'No registered template with templateId "missing-f14-template"'
+    ) &&
     sla?.runs === 2 &&
     sla.successCount === 1 &&
     sla.successRate === 0.5 &&
