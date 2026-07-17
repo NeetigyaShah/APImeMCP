@@ -49,7 +49,7 @@ export async function withResultCache<T>(params: CacheKeyParams, run: () => Prom
   const cached = getCached<T>(key);
   if (cached !== undefined) return cached;
 
-  return withLock(async () => {
+  return withLock(key, async () => {
     const lockedCached = getCached<T>(key);
     if (lockedCached !== undefined) return lockedCached;
     const value = await run();

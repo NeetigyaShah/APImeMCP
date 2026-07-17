@@ -8,7 +8,7 @@
     "S4": "Done",
     "S5": "Done",
     "S6": "Done",
-    "S7": "In-Review",
+    "S7": "Done",
     "S8": "Done",
     "S9": "Done",
     "S10": "N/A",
@@ -19,5 +19,5 @@
   "blockedBy": null,
   "owner": "feat/F16-result-cache",
   "reviewer": null,
-  "updatedAt": "2026-07-17T10:06:20.562Z"
+  "updatedAt": "2026-07-17T10:16:56.118Z"
 }
