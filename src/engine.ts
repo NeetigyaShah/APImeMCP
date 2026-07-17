@@ -9,6 +9,7 @@ import { evaluateCel } from './cel-eval.js';
 import type { DriftReport } from './drift.js';
 import { recordMeasure } from './metrics.js';
 import { validateOutput } from './schema.js';
+import { enforcePolicy } from './policy.js';
 import {
   confirmAppConnection,
   getAppConnection,
@@ -279,6 +280,7 @@ export async function renderPage(
 
 export interface ExecuteExtractionOptions {
   targetUrl: string;
+  templateId?: string;
   scriptPath?: string;
   executableScript?: string;
   captureForensicsOnError?: boolean;
@@ -306,6 +308,9 @@ export interface ExecuteExtractionOptions {
 }
 
 export async function executeExtraction(options: ExecuteExtractionOptions): Promise<unknown> {
+  // Enforce policy before any navigation (F12: policy engine)
+  await enforcePolicy(options.templateId, options.targetUrl);
+
   const persistentContext = options.connectionId ? await ensureAppContext(options.connectionId) : undefined;
   const context =
     persistentContext ??

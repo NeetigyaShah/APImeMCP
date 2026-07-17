@@ -10,14 +10,14 @@
     "S6": "Todo",
     "S7": "Todo",
     "S8": "Todo",
-    "S9": "Todo",
+    "S9": "Done",
     "S10": "Todo",
     "S11": "Todo"
   },
-  "overall": "Not-started",
-  "currentGate": null,
+  "overall": "In-Progress",
+  "currentGate": "G3",
   "blockedBy": null,
   "owner": null,
-  "reviewer": null,
-  "updatedAt": ""
+  "reviewer": "codex-f04-g2-reviewer",
+  "updatedAt": "2026-07-17T13:53:48.545Z"
 }

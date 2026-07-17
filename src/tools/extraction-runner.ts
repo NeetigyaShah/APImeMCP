@@ -129,6 +129,7 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
         let drift: DriftReport | undefined;
         const data = await deps.executeMeasured(measure, () => deps.executeExtraction({
           targetUrl: resolvedUrl,
+          templateId: entry.templateId,
           scriptPath: entry.scriptPath,
           proxyUrl,
           cookieString: effectiveCookies,
