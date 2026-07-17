@@ -10,14 +10,14 @@
     "S6": "Todo",
     "S7": "Todo",
     "S8": "Todo",
-    "S9": "Todo",
-    "S10": "Todo",
+    "S9": "Done",
+    "S10": "Done",
     "S11": "Todo"
   },
-  "overall": "Not-started",
-  "currentGate": null,
-  "blockedBy": null,
-  "owner": null,
-  "reviewer": null,
-  "updatedAt": ""
+  "overall": "Blocked",
+  "currentGate": "G4",
+  "blockedBy": "G4 FAIL: synthesize_schema's recording path calls deps.saveRecording(recordingRecord) before deps.crystallizeRecording() runs its secret-fill check, so a fill step with a secret-like value (password/token/API key) is persisted in cleartext to templates/recordings/<id>.json before crystallizeRecording throws and rejects the operation. Reproduced live: a fill step with value 'AKIAABCDEFGHIJKLMNOP' is written via saveRecording, then the call rejects with 'secret-like fill value', but the recording file on disk already contains the raw secret. Fix: run the secret check (or a value-only pass of it) against parsedRecording.steps before saveRecording, or redact/strip secret-like fill values from the persisted Recording.",
+  "owner": "codex-f06-builder",
+  "reviewer": "security-reviewer-g4",
+  "updatedAt": "2026-07-17T13:57:56.562Z"
 }
