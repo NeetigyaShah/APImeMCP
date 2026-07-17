@@ -175,6 +175,12 @@ export interface ActionSequence {
   cookies?: Array<Record<string, unknown>>;
 }
 
+export interface CelContext {
+  vars: Record<string, unknown>;
+  page: { url: string; status?: number; title?: string };
+  lastResult?: unknown;
+}
+
 export interface ManifestEntry {
   templateId: string;
   domainPattern: string;

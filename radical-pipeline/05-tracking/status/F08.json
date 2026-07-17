@@ -1,23 +1,23 @@
 {
   "id": "F08",
   "subtasks": {
-    "S0": "Todo",
-    "S1": "Todo",
+    "S0": "Done",
+    "S1": "Done",
     "S2": "N/A",
-    "S3": "Todo",
-    "S4": "Todo",
-    "S5": "Todo",
-    "S6": "Todo",
-    "S7": "Todo",
-    "S8": "Todo",
-    "S9": "Todo",
-    "S10": "Todo",
-    "S11": "Todo"
+    "S3": "Done",
+    "S4": "Done",
+    "S5": "N/A",
+    "S6": "Done",
+    "S7": "Done",
+    "S8": "Done",
+    "S9": "Done",
+    "S10": "Done",
+    "S11": "Done"
   },
-  "overall": "In-Progress",
-  "currentGate": null,
+  "overall": "Done",
+  "currentGate": "G7",
   "blockedBy": null,
   "owner": null,
   "reviewer": null,
-  "updatedAt": "2026-07-17T12:01:46.568Z"
+  "updatedAt": "2026-07-17T12:18:17.690Z"
 }

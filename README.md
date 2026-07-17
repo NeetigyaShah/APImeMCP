@@ -339,7 +339,7 @@ Save a reusable extraction script for a domain.
 |---|---|---|
 | `templateId` | string | lowercase kebab-case, e.g. `amazon-product` |
 | `domainPattern` | string | e.g. `amazon.com` — matches that hostname and its subdomains |
-| `executableScript` | string | vanilla JavaScript, evaluated via `page.evaluate()`; must return a JSON-serializable value; capped at 100KB |
+| `executableScript` | string | vanilla JavaScript, evaluated via `page.evaluate()`; may use `cel()`, `setVar()`, and `getVar()` for live-state branching; must return a JSON-serializable value; capped at 100KB |
 | `fixedTargetUrl` | string, optional | for a template that always targets the same page (e.g. "today's deals") — set this and `execute_native_extraction` can omit `targetUrl` entirely. Marked with a ★ badge in the dashboard. |
 | `waitStrategy` | `'domcontentloaded'\|'load'\|'networkidle'`, optional | how long to wait after navigation before running the script. Omit it and new templates default to the fast `domcontentloaded`; templates registered before this field existed were migrated to explicit `networkidle` (their original behavior) so nothing broke retroactively. Set `networkidle` explicitly if a page populates its data asynchronously after the initial HTML loads (e.g. a paginated grid) and `readySelector` isn't a better fit. |
 | `readySelector` | string, optional | wait for this selector to appear before running the script — a more precise alternative to `networkidle` when you know exactly what element indicates "the data is ready." |
@@ -348,6 +348,17 @@ Save a reusable extraction script for a domain.
 
 Returns the saved `{ templateId, domainPattern, scriptPath, fixedTargetUrl?, waitStrategy?, readySelector?, outputSchema?, createdAt, updatedAt }`.
 Re-registering an existing `templateId` with the same script but a new `waitStrategy`/`readySelector` updates just that setting (upsert semantics).
+
+Scripts can store a value with `setVar(name, value)`, retrieve it with `getVar(name)`,
+and branch with `cel(expression)`. The CEL subset supports literals, dotted paths such
+as `vars.count` and `page.title`, comparisons, `&&`, `||`, `!`, `in`, and `has(path)`:
+
+```js
+() => {
+  setVar('inStock', document.querySelector('[data-stock]')?.dataset.stock === '1');
+  return cel('vars.inStock') ? { state: 'in-stock' } : { state: 'sold-out' };
+}
+```
 
 ### `preview_transform`
 
