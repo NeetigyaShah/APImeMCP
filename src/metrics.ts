@@ -4,6 +4,10 @@ import { withLock } from './lock.js';
 import { MeasureRecordSchema } from './types.js';
 import type { MeasureRecord, RunKind, TemplateSla } from './types.js';
 
+export type MeasureListener = (m: MeasureRecord) => void;
+
+const listeners: MeasureListener[] = [];
+
 function getMetricsDirectory(): string {
   return path.join(path.resolve(process.cwd()), 'templates');
 }
@@ -93,12 +97,28 @@ export function preExecutionMeasure(
   };
 }
 
+export function onMeasure(listener: MeasureListener): () => void {
+  listeners.push(listener);
+  return () => {
+    const idx = listeners.indexOf(listener);
+    if (idx >= 0) listeners.splice(idx, 1);
+  };
+}
+
 export async function recordMeasure(record: MeasureRecord): Promise<void> {
   const validated = MeasureRecordSchema.parse(record);
   await withLock(async () => {
     await migrateLegacyCsvIfPresentLocked();
     await appendRecords([validated]);
   });
+  // Fan out to listeners after successful write, never break the producer path
+  for (const listener of listeners) {
+    try {
+      listener(validated);
+    } catch {
+      // Silently swallow listener errors to prevent breaking the record path
+    }
+  }
 }
 
 async function readMeasures(): Promise<MeasureRecord[]> {

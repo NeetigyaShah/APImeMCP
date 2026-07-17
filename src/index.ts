@@ -34,6 +34,7 @@ import { registerPreviewTransformTool } from './tools/transform-tool.js';
 import { registerDiscoverTemplatesTool } from './discovery.js';
 import { findPipelineById, listPipelineDefs, registerPipeline, registerRegisterPipelineTool, registerRunPipelineTool, registerListPipelinesTool } from './pipeline.js';
 import type { PipelineDeps } from './pipeline.js';
+import { initOtelAdapter } from './otel-adapter.js';
 
 let updateStatus: UpdateStatus = { updateAvailable: false, latestCommit: null };
 
@@ -157,6 +158,7 @@ async function main(): Promise<void> {
   await initBrowser();
   await startConfiguredAppConnections();
   await scheduler.loadPersisted();
+  initOtelAdapter();
   startDashboard({ runExtraction, scheduler, isBrowserReady, log, logError });
   void checkForUpdates().then((status) => {
     updateStatus = status;

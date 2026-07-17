@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { getAllSla, getTemplateSla, migrateLegacyCsvIfPresent, preExecutionMeasure, recordMeasure } from './metrics.js';
+import { getAllSla, getTemplateSla, migrateLegacyCsvIfPresent, preExecutionMeasure, recordMeasure, onMeasure } from './metrics.js';
 import { MeasureRecordSchema } from './types.js';
 
 let originalCwd: string;
@@ -124,5 +124,57 @@ describe('metrics SLA store', () => {
         driftEntries: [],
       },
     ]);
+  });
+
+  it('listener receives exact record passed to recordMeasure', async () => {
+    const listener = vi.fn();
+    const unsubscribe = onMeasure(listener);
+
+    const record = {
+      templateId: 'listener-test',
+      kind: 'extraction' as const,
+      success: true,
+      durationMs: 50,
+      timestamp: '2026-07-17T08:00:00.000Z',
+    };
+
+    await recordMeasure(record);
+
+    expect(listener).toHaveBeenCalledWith(record);
+
+    unsubscribe();
+
+    // After unsubscribe, listener should not be called again
+    listener.mockClear();
+    await recordMeasure({
+      ...record,
+      templateId: 'listener-test-2',
+    });
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('throws in one listener do not prevent others from receiving records', async () => {
+    const throwingListener = vi.fn(() => {
+      throw new Error('Simulated listener failure');
+    });
+    const successListener = vi.fn();
+
+    onMeasure(throwingListener);
+    onMeasure(successListener);
+
+    const record = {
+      templateId: 'isolation-test',
+      kind: 'extraction' as const,
+      success: true,
+      durationMs: 30,
+      timestamp: '2026-07-17T08:00:00.000Z',
+    };
+
+    // Should not throw even though the first listener throws
+    await expect(recordMeasure(record)).resolves.toBeUndefined();
+
+    expect(throwingListener).toHaveBeenCalledWith(record);
+    expect(successListener).toHaveBeenCalledWith(record);
   });
 });
