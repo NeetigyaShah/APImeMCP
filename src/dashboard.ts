@@ -12,6 +12,7 @@ import { templatesWithSavedCookies, saveCookies } from './cookie-store.js';
 import { getProgress, reportDashboardStatus } from './progress.js';
 import type { Scheduler, ScheduledJob } from './scheduler.js';
 import type { DashboardSection } from './dashboard-sections/types.js';
+import { loadSnapshot } from './snapshot.js';
 
 const DASHBOARD_PORT = 3000;
 const LOGS_DIR = path.resolve(process.cwd(), 'output', 'logs');
@@ -131,6 +132,8 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
           <span class="mono id">${entry.templateId}</span>
           ${entry.fixedTargetUrl ? `<span class="mono fixed-badge" title="${entry.fixedTargetUrl}">&#9733; no input needed</span>` : ''}
           ${entry.kind === 'action-sequence' ? '<span class="mono kind-badge" title="Action-sequence template">&#9881; action-sequence</span>' : ''}
+          ${entry.kind === 'static-http' ? '<span class="mono kind-badge" title="Static HTTP template (no browser)">&#9889; static-http</span>' : ''}
+          ${entry.templateKind === 'write' ? '<span class="mono kind-badge" style="color:var(--err)" title="Write template (fills/submits a real form)">&#9997; write</span>' : ''}
           ${cookieSet.has(entry.templateId) ? '<span class="mono cookie-badge" title="Session cookies saved for this template">&#128273; cookies saved</span>' : ''}
           ${entry.lastVerified ? `<span class="dot ${entry.lastVerified.success ? 'on' : 'off'}" title="${entry.lastVerified.success ? 'Last verified OK' : (entry.lastVerified.error ?? 'Last verification failed')}"></span>` : ''}
           <span class="mono domain">${entry.domainPattern}</span>
@@ -462,6 +465,8 @@ function templateRowHtml(entry) {
       '<span class="mono id">' + entry.templateId + '</span>' +
       (fixed ? '<span class="mono fixed-badge" title="' + entry.fixedTargetUrl + '">&#9733; no input needed</span>' : '') +
       (entry.kind === 'action-sequence' ? '<span class="mono kind-badge" title="Action-sequence template">&#9881; action-sequence</span>' : '') +
+      (entry.kind === 'static-http' ? '<span class="mono kind-badge" title="Static HTTP template (no browser)">&#9889; static-http</span>' : '') +
+      (entry.templateKind === 'write' ? '<span class="mono kind-badge" style="color:var(--err)" title="Write template (fills/submits a real form)">&#9997; write</span>' : '') +
       (entry.hasSavedCookies ? '<span class="mono cookie-badge" title="Session cookies saved for this template">&#128273; cookies saved</span>' : '') +
       (entry.lastVerified ? '<span class="dot ' + (entry.lastVerified.success ? 'on' : 'off') + '" title="' + (entry.lastVerified.success ? 'Last verified OK' : (entry.lastVerified.error || 'Last verification failed')) + '"></span>' : '') +
       '<span class="mono domain">' + entry.domainPattern + '</span>' +
@@ -608,7 +613,11 @@ export function startDashboard(deps: DashboardDeps): void {
   });
 
   app.get('/api/stats', async (_req, res) => {
-    res.json({ templates: await getAllSla() });
+    const templates = await getAllSla();
+    const withSnapshot = await Promise.all(
+      templates.map(async (t) => ({ ...t, hasSnapshot: (await loadSnapshot(t.templateId)) !== null }))
+    );
+    res.json({ templates: withSnapshot });
   });
 
   app.get('/api/jobs', (_req, res) => {
