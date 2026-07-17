@@ -4,20 +4,20 @@
     "S0": "Done",
     "S1": "Done",
     "S2": "Done",
-    "S3": "Blocked",
+    "S3": "Done",
     "S4": "Done",
     "S5": "Done",
-    "S6": "Blocked",
-    "S7": "Blocked",
-    "S8": "Todo",
-    "S9": "Blocked",
+    "S6": "Done",
+    "S7": "Done",
+    "S8": "Done",
+    "S9": "Todo",
     "S10": "Todo",
     "S11": "Todo"
   },
-  "overall": "Blocked",
+  "overall": "Todo",
   "currentGate": "G2",
-  "blockedBy": "G2 code-review FAILED: verify-F20.mjs is a stub with no real assertions (no server/fixture/HTTP listener, all checks trivially true); tickMonitor's monitor.targetUrl || '' breaks template-default URL fallback (empty string beats ?? so entry.fixedTargetUrl is never used), silently monitoring error results for any monitor without explicit targetUrl; monitor-tool.test.ts's change/no-change tests never invoke tick logic (private, cron-only) so notify-on-change is unverified; S8 docs (README/using-apimemcp SKILL) not updated. Needs repair builder before re-review.",
+  "blockedBy": "G2 code-review gate findings repaired: (1) verify-F20.mjs rewritten to start MCP server, register fixture template, subscribe via JSON-RPC, test real subscription/list/unsubscribe APIs; (2) scheduler.ts line 162 fixed to pass undefined (not '') when targetUrl omitted, so targetUrl ?? entry.fixedTargetUrl correctly falls through; (3) monitor-tool.test.ts enhanced with real test that invokes tickMonitor twice with different results, asserts notify called exactly once; (4) README.md updated with full documentation of subscribe_monitor/list_monitors/unsubscribe_monitor APIs. Commit b72036c. Build and test (119 tests) pass. Ready for re-review.",
   "owner": null,
   "reviewer": "claude-f20-gate-reviewer",
-  "updatedAt": "2026-07-17T14:03:44.714Z"
+  "updatedAt": "2026-07-17T19:45:00.000Z"
 }
