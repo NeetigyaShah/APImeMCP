@@ -10,14 +10,14 @@
     "S6": "Done",
     "S7": "Done",
     "S8": "Done",
-    "S9": "In-Review",
+    "S9": "Done",
     "S10": "Done",
     "S11": "Todo"
   },
   "overall": "In-Progress",
-  "currentGate": "G2",
+  "currentGate": "G5",
   "blockedBy": null,
-  "owner": "codex-f06-builder",
-  "reviewer": "codex-f06-reviewer",
-  "updatedAt": "2026-07-17T13:03:17.132Z"
+  "owner": "codex-f06-builder-repair",
+  "reviewer": "security-reviewer-g4",
+  "updatedAt": "2026-07-17T19:43:52.000Z"
 }
