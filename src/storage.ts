@@ -73,6 +73,7 @@ export async function registerTemplate(
       ...(input.source ? { source: input.source } : {}),
       ...(input.contributedBy ? { contributedBy: input.contributedBy } : {}),
       ...(input.allowedDomains ? { allowedDomains: input.allowedDomains } : {}),
+      ...(input.secretInputs ? { secretInputs: input.secretInputs } : {}),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };

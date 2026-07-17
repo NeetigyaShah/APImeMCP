@@ -6,7 +6,7 @@
     "S2": "Done",
     "S3": "Done",
     "S4": "Done",
-    "S5": "Done",
+    "S5": "Blocked",
     "S6": "Done",
     "S7": "Todo",
     "S8": "Done",
@@ -14,10 +14,10 @@
     "S10": "N/A",
     "S11": "Todo"
   },
-  "overall": "In-Progress",
+  "overall": "Blocked",
   "currentGate": "G2",
-  "blockedBy": null,
+  "blockedBy": "G2 code-review FAIL: secretInputs never wired end-to-end (register_extraction_template schema omits it; extraction-runner.ts never forwards entry.secretInputs to executeExtraction), so the vault feature cannot be used from a real extraction run; verify-F13.mjs also never exercises the login/redaction path (uses non-existent window.secrets)",
   "owner": "engine-builder-f13",
-  "reviewer": null,
-  "updatedAt": "2026-07-17T19:53:00Z"
+  "reviewer": "code-reviewer-g2",
+  "updatedAt": "2026-07-17T14:28:08.383Z"
 }

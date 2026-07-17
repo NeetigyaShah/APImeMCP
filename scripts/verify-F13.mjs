@@ -49,24 +49,22 @@ try {
     throw new Error(`Failed to set vault secret: ${secretData.error}`);
   }
 
-  // 2. Register template that uses vault secrets
+  // 2. Register a template with secretInputs referencing the vault entry. Secrets are
+  // injected into the in-page cel() vars closure, not window.secrets (see engine.ts's
+  // page.evaluate({ secrets }) call) -- read them via getVar(...).
   const scriptSource = `
     async () => {
       const username = document.getElementById('username');
       const password = document.getElementById('password');
-      username.value = window.secrets?.username || '';
-      password.value = window.secrets?.password || '';
+      username.value = getVar('username') || '';
+      password.value = getVar('password') || '';
       document.getElementById('login-form').requestSubmit();
-      // Wait for login to complete
-      await new Promise(resolve => {
-        const observer = new MutationObserver(() => {
-          if (document.getElementById('status').style.display !== 'none') {
-            observer.disconnect();
-            resolve();
-          }
-        });
-        observer.observe(document, { subtree: true, attributeFilter: ['style', 'display'] });
-      });
+      // Wait for login to complete (poll instead of MutationObserver -- simpler and
+      // doesn't risk hanging if the observer's attributeFilter misses the mutation).
+      for (let i = 0; i < 50; i++) {
+        if (document.getElementById('status').style.display !== 'none') break;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
       return { success: true, message: document.getElementById('status').textContent };
     }
   `;
@@ -78,12 +76,34 @@ try {
       domainPattern: '127.0.0.1',
       executableScript: scriptSource,
       fixedTargetUrl: targetUrl,
+      secretInputs: { username: 'verify-f13-login.username', password: 'verify-f13-login.password' },
     },
   });
 
-  // 3. Execute extraction with vault secrets (via secretInputs on the template)
-  // Note: We need to update the template in the manifest to include secretInputs
-  // For now, we'll just verify that the tool works
+  // 3. Run the real extraction end to end: the page fills the login form with the
+  // vault-resolved credential and submits it -- this is the actual acceptance criterion,
+  // not just that the vault CRUD tools work in isolation.
+  const runResult = await client.callTool(
+    { name: 'execute_native_extraction', arguments: { templateId: 'verify-f13' } },
+    undefined,
+    { timeout: 30_000 }
+  );
+  const runText = runResult.content?.[0]?.text ?? '';
+  const runData = JSON.parse(runText);
+  if (runResult.isError || !runData?.data?.success) {
+    throw new Error(`Extraction with vault-resolved credential failed: ${runText}`);
+  }
+  if (!String(runData.data.message || '').includes('verify-user')) {
+    throw new Error(`Login page did not report the vault-resolved username, got: ${JSON.stringify(runData.data)}`);
+  }
+
+  // Zero plaintext leakage: the real secret value must never appear in the tool's own
+  // stdout/response, matching spec section 8's acceptance criteria.
+  if (runText.includes('verify-pass')) {
+    throw new Error('Plaintext vault secret leaked into execute_native_extraction response');
+  }
+
+  // 4. Vault CRUD sanity: listed entries never carry ciphertext/iv/authTag.
   const listResult = await client.callTool({
     name: 'list_vault_secrets',
     arguments: {},
@@ -93,8 +113,6 @@ try {
   if (!found) {
     throw new Error('Vault secret not listed after creation');
   }
-
-  // Verify the secret has no plaintext in the list
   const secretEntry = secrets.find((s) => s.id === 'verify-f13-login');
   if (secretEntry.ciphertext || secretEntry.iv || secretEntry.authTag) {
     throw new Error('Vault secret leaked ciphertext/iv/authTag in list');

@@ -73,6 +73,10 @@ export const RegisterExtractionTemplateShape = {
   readySelector: z.string().optional(),
   outputSchema: z.record(z.unknown()).optional(),
   transform: TransformSpecSchema.optional(),
+  // F13: maps script-visible field names to vault entry ids or subkeys (e.g.,
+  // { username: "vault-id.username", password: "vault-id.password" }). Resolved and
+  // injected at run time, never persisted or logged in cleartext (see engine.ts).
+  secretInputs: z.record(z.string()).optional(),
 };
 
 export const RegisterExtractionTemplateInputSchema = z.object(RegisterExtractionTemplateShape);

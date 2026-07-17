@@ -142,6 +142,7 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
           readySelector: entry.readySelector,
           networkAllowlist: entry.source === 'registry' ? entry.allowedDomains ?? [] : undefined,
           onNetworkRequest,
+          secretInputs: entry.secretInputs,
         }), (result) => {
           if (!entry.outputSchema) return undefined;
           drift = checkDrift(entry.templateId, entry.outputSchema, result);
