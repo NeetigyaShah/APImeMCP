@@ -4,12 +4,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   findPipelineById,
   listPipelineDefs,
+  registerListPipelinesTool,
+  registerRegisterPipelineTool,
+  registerRunPipelineTool,
   registerPipeline,
   resolveInputMapping,
   runPipeline,
   PipelineMappingError,
 } from './pipeline.js';
 import type { PipelineDef } from './types.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 const pipelinesDir = path.resolve(process.cwd(), 'templates', 'pipelines');
 
@@ -116,5 +120,32 @@ describe('pipeline runner', () => {
 
   it('exposes mapping errors as a named error', () => {
     expect(() => resolveInputMapping({ value: 'stepA.missing' }, {}, {})).toThrow(PipelineMappingError);
+  });
+
+  it('routes registered tools through injected pipeline collaborators', async () => {
+    const calls: string[] = [];
+    const handlers: Record<string, (input: any) => Promise<unknown>> = {};
+    const server = {
+      tool(name: string, _shape: unknown, handler: (input: any) => Promise<unknown>) {
+        handlers[name] = handler;
+      },
+    } as unknown as McpServer;
+    const deps = {
+      runExtraction: async () => ({ success: true, data: {} }),
+      registerPipeline: async () => { calls.push('register'); },
+      findPipelineById: () => ({ ...twoStepPipeline }),
+      listPipelineDefs: () => [twoStepPipeline],
+      recordMeasure: () => { calls.push('measure'); },
+    };
+
+    registerRegisterPipelineTool(server, deps);
+    registerRunPipelineTool(server, deps);
+    registerListPipelinesTool(server, deps);
+
+    await handlers.register_pipeline({ pipelineId: 'injected-flow', name: 'Injected flow', steps: twoStepPipeline.steps });
+    await handlers.run_pipeline({ pipelineId: twoStepPipeline.id });
+    await handlers.list_pipelines({});
+
+    expect(calls).toEqual(['register', 'measure']);
   });
 });
