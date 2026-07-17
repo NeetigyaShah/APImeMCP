@@ -13,6 +13,7 @@ export type ExtractionRunner = (
   connectionId?: string,
   executableScript?: string,
   kind?: string,
+  onNetworkRequest?: (url: string) => void,
 ) => Promise<ExtractionResult>;
 
 export interface ToolDeps {

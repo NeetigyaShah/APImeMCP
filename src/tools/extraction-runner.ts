@@ -32,6 +32,7 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
     connectionId?: string,
     executableScript?: string,
     _kind = 'extraction',
+    onNetworkRequest?: (url: string) => void,
   ): Promise<ExtractionResult> {
     const isDryRun = executableScript !== undefined;
     const startedAt = Date.now();
@@ -64,6 +65,7 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
           cookieString,
           simulateLowBandwidth: simulateLowBandwidth ?? true,
           captureForensicsOnError: false,
+          onNetworkRequest,
         }));
         return { success: true, data, meta: buildMeta('', '', targetUrl) };
       }
@@ -102,7 +104,7 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
         const raw = await deps.readFile(deps.resolvePath(process.cwd(), entry.scriptPath), 'utf8');
         const sequence = JSON.parse(raw) as ActionSequence;
         measurementStarted = true;
-        await deps.executeMeasured(measure, () => deps.executeActionSequence({ sequence, proxyUrl, simulateLowBandwidth, headful, connectionId, networkAllowlist: entry.source === 'registry' ? entry.allowedDomains ?? [] : undefined }));
+        await deps.executeMeasured(measure, () => deps.executeActionSequence({ sequence, proxyUrl, simulateLowBandwidth, headful, connectionId, networkAllowlist: entry.source === 'registry' ? entry.allowedDomains ?? [] : undefined, onNetworkRequest }));
         await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
         return deps.createSuccessfulResult({ completedSteps: sequence.steps.length }, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema);
       }
@@ -119,7 +121,8 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
         simulateLowBandwidth: simulateLowBandwidth ?? true,
         waitStrategy: entry.waitStrategy,
         readySelector: entry.readySelector,
-          networkAllowlist: entry.source === 'registry' ? entry.allowedDomains ?? [] : undefined,
+        networkAllowlist: entry.source === 'registry' ? entry.allowedDomains ?? [] : undefined,
+        onNetworkRequest,
       }));
       await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
       return deps.createSuccessfulResult(data, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema);

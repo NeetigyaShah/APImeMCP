@@ -1,9 +1,13 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { AddCommunityTemplateShape } from '../types.js';
-import type { AddFromRegistryResult } from '../registry-client.js';
+export interface AddCommunityTemplateResult {
+  registered: boolean;
+  templateId?: string;
+  error?: string;
+}
 
 export interface AddCommunityTemplateDeps {
-  addFromRegistry: (domain: string) => Promise<AddFromRegistryResult>;
+  addFromRegistry: (domain: string) => Promise<AddCommunityTemplateResult>;
   log?: (message: string) => void;
   logError?: (message: string) => void;
 }
@@ -11,7 +15,7 @@ export interface AddCommunityTemplateDeps {
 export async function addCommunityTemplateCore(
   deps: AddCommunityTemplateDeps,
   args: { domain: string }
-): Promise<AddFromRegistryResult> {
+): Promise<AddCommunityTemplateResult> {
   return deps.addFromRegistry(args.domain);
 }
 
