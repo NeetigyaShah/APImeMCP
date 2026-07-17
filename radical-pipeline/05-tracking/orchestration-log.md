@@ -46,6 +46,7 @@
 ## 2026-07-17 - Program 1 / Wave 2 In Progress
 
 - Fresh isolated builders own F02 (`feat/F02-drift-detection`), F10 (`feat/F10-transform-layer`), F16 (`feat/F16-result-cache`), and F23 (`feat/F23-golden-snapshots`).
+- Wave 2 launch attempt `019f6f7c-*` failed before execution for all four builders because the selected `gpt-5.6-terra` model was at capacity. No worktree changes occurred; retry is being made with a different model.
 
 ## Agent Failures
 
