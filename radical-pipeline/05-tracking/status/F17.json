@@ -1,23 +1,23 @@
 {
   "id": "F17",
   "subtasks": {
-    "S0": "Todo",
-    "S1": "Todo",
+    "S0": "Done",
+    "S1": "Done",
     "S2": "N/A",
-    "S3": "Todo",
-    "S4": "Todo",
-    "S5": "N/A",
-    "S6": "Todo",
-    "S7": "Todo",
-    "S8": "Todo",
+    "S3": "Done",
+    "S4": "Done",
+    "S5": "Done",
+    "S6": "Done",
+    "S7": "Done",
+    "S8": "Done",
     "S9": "Todo",
     "S10": "Todo",
     "S11": "Todo"
   },
-  "overall": "Not-started",
-  "currentGate": null,
+  "overall": "In-Prog",
+  "currentGate": "G2",
   "blockedBy": null,
-  "owner": null,
+  "owner": "engine-builder",
   "reviewer": null,
-  "updatedAt": ""
+  "updatedAt": "2026-07-17T13:56:00.000Z"
 }

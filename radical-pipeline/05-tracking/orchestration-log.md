@@ -1,5 +1,17 @@
 # Radical Pipeline Orchestration Log
 
+## 2026-07-17 — F17 Engine Build
+
+- F17 (OpenTelemetry observability) builder created isolated worktree at `.claude/worktrees/F17-slug` on `feat/F17-otel-observability`.
+- Implemented 2-line listener hook in `src/metrics.ts` (onMeasure/unsubscribe pattern, error isolation).
+- Created `src/otel-adapter.ts`: lazy OTel SDK init (zero cost when disabled), counter + histogram + synthetic-span export, conditional on `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- Added OTel SDK dependencies to `package.json` (api, sdk-metrics, sdk-trace-base, exporter-metrics-otlp-http/trace-otlp-http, v1.7/1.18/0.43 compatible).
+- Added `initOtelAdapter()` call in `index.ts` main startup (one-line append per ADR-02).
+- Wrote `src/otel-adapter.test.ts` (8 test cases) and extended `src/metrics.test.ts` with listener tests (2 new cases).
+- Created `scripts/verify-F17.mjs`: tests disabled-by-default, respects OTEL_SDK_DISABLED, listener integration — all passing.
+- `npm run build` and `npm test` (121 tests, F17 tests green) passing locally. Commit `ecfdb79`.
+- G1 Build gate ready (source, tests, verifier all green). Moving to G2 Code-Review.
+
 ## 2026-07-17 — Program 1 / Wave 0
 
 - Baseline on `master`: `npm run build` and `npm test` passed (25 tests).
