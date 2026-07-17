@@ -2,22 +2,22 @@
   "id": "F12",
   "subtasks": {
     "S0": "Done",
-    "S1": "Todo",
-    "S2": "Todo",
-    "S3": "Todo",
-    "S4": "Todo",
+    "S1": "Done",
+    "S2": "N/A",
+    "S3": "Done",
+    "S4": "Done",
     "S5": "N/A",
     "S6": "Done",
-    "S7": "Todo",
+    "S7": "Done",
     "S8": "Todo",
-    "S9": "Todo",
-    "S10": "Todo",
-    "S11": "Todo"
+    "S9": "Done",
+    "S10": "N/A",
+    "S11": "Done"
   },
-  "overall": "In-Progress",
-  "currentGate": "G2",
+  "overall": "Done",
+  "currentGate": "G7",
   "blockedBy": null,
-  "owner": null,
-  "reviewer": null,
-  "updatedAt": "2026-07-17T13:58:09.203Z"
+  "owner": "codex-f12-builder",
+  "reviewer": "claude-main-session-g2-g4-g5",
+  "updatedAt": "2026-07-17T14:10:00.000Z"
 }

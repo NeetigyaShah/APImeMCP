@@ -29,10 +29,10 @@ const DEFAULT_CONFIG: PolicyConfig = {
   tosRestrictedDomains: [],
 };
 
-let memoizedConfig = { ...DEFAULT_CONFIG };
+let memoizedConfig: PolicyConfig | undefined;
 
 export function getPolicyConfig(): PolicyConfig {
-  if (memoizedConfig !== null) return memoizedConfig;
+  if (memoizedConfig !== undefined) return memoizedConfig;
 
   const cfg = { ...DEFAULT_CONFIG };
 
@@ -52,7 +52,12 @@ export function getPolicyConfig(): PolicyConfig {
 }
 
 export function configurePolicy(overrides: Partial<PolicyConfig>): void {
-  memoizedConfig = { ...memoizedConfig, ...overrides };
+  memoizedConfig = { ...(memoizedConfig ?? DEFAULT_CONFIG), ...overrides };
+}
+
+// ponytail: test-only reset so getPolicyConfig() re-reads env vars between tests.
+export function _resetMemoizedConfig(): void {
+  memoizedConfig = undefined;
 }
 
 // In-memory state for rate limiting and caching
@@ -68,7 +73,7 @@ function checkRateLimit(templateId: string, cfg: PolicyConfig): void {
       const retryAfterMs = cfg.minIntervalMsPerTemplate - elapsed;
       throw new PolicyBlockedError(
         'rate-limit',
-        `Template "${templateId}" rate limited. Retry after ${retryAfterMs}ms`,
+        `policy:rate-limit: Template "${templateId}" rate limited. Retry after ${retryAfterMs}ms`,
         retryAfterMs,
       );
     }
@@ -118,7 +123,7 @@ async function fetchRobotsTxt(
         // 5xx or other error = fail closed
         throw new PolicyBlockedError(
           'robots',
-          `Failed to fetch robots.txt from ${origin}: HTTP ${response.status}`,
+          `policy:robots: Failed to fetch robots.txt from ${origin}: HTTP ${response.status}`,
         );
       }
 
@@ -155,7 +160,7 @@ async function fetchRobotsTxt(
     // Network error, timeout, or abort = fail closed
     throw new PolicyBlockedError(
       'robots',
-      `Cannot verify robots.txt for ${origin}: ${error instanceof Error ? error.message : String(error)}`,
+      `policy:robots: Cannot verify robots.txt for ${origin}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -171,7 +176,7 @@ async function checkRobotsAndTos(url: string, cfg: PolicyConfig): Promise<void> 
     if (hostname === blockedDomain.toLowerCase() || hostname.endsWith(`.${blockedDomain.toLowerCase()}`)) {
       throw new PolicyBlockedError(
         'tos',
-        `Domain "${hostname}" is restricted by terms of service`,
+        `policy:tos: Domain "${hostname}" is restricted by terms of service`,
       );
     }
   }
@@ -183,7 +188,7 @@ async function checkRobotsAndTos(url: string, cfg: PolicyConfig): Promise<void> 
   if (isPathDisallowed(pathname, robotsTxt.disallow)) {
     throw new PolicyBlockedError(
       'robots',
-      `Path "${pathname}" is disallowed by robots.txt for ${origin}`,
+      `policy:robots: Path "${pathname}" is disallowed by robots.txt for ${origin}`,
     );
   }
 }

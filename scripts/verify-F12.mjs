@@ -170,7 +170,7 @@ async function main() {
 
     // Build first
     log('Building project...');
-    const buildResult = await runNode(path.resolve(projectRoot, 'node_modules/.bin/tsc'));
+    const buildResult = await runNode(path.resolve(projectRoot, 'node_modules/typescript/bin/tsc'));
     if (buildResult.code !== 0) {
       fail(`Build failed: ${buildResult.stderr}`);
     }
@@ -202,8 +202,8 @@ async function main() {
         fail(`Test 2: Should have errored but succeeded: ${JSON.stringify(result)}`);
       }
       const content = result.content?.[0]?.text || '';
-      if (!content.includes('policy:robots') && !content.includes('robots')) {
-        fail(`Test 2: Error should mention robots, got: ${content}`);
+      if (!content.includes('policy:robots:')) {
+        fail(`Test 2: Error should carry the literal "policy:robots:" prefix, got: ${content}`);
       }
       pass('Blocked path fails with robots error');
     } catch (error) {
@@ -234,8 +234,8 @@ console.log('Config updated');
         fail(`Test 3: Second call should have errored but succeeded`);
       }
       const content = result2.content?.[0]?.text || '';
-      if (!content.includes('policy:rate-limit') && !content.includes('rate-limit')) {
-        fail(`Test 3: Error should mention rate-limit, got: ${content}`);
+      if (!content.includes('policy:rate-limit:')) {
+        fail(`Test 3: Error should carry the literal "policy:rate-limit:" prefix, got: ${content}`);
       }
       pass('Rate limit blocks second call');
     } catch (error) {

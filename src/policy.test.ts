@@ -6,6 +6,7 @@ import {
   configurePolicy,
   clearRateLimitState,
   clearRobotsCache,
+  _resetMemoizedConfig,
 } from './policy.js';
 
 describe('policy.ts', () => {
@@ -215,9 +216,17 @@ describe('policy.ts', () => {
 
   describe('config', () => {
     it('should read APIMEMCP_POLICY_MIN_INTERVAL_MS env var', async () => {
-      // Note: this test might be flaky due to memoization; for production use configurePolicy()
-      const cfg = getPolicyConfig();
-      expect(cfg.minIntervalMsPerTemplate).toBeGreaterThanOrEqual(0);
+      const original = process.env.APIMEMCP_POLICY_MIN_INTERVAL_MS;
+      process.env.APIMEMCP_POLICY_MIN_INTERVAL_MS = '5000';
+      _resetMemoizedConfig();
+      try {
+        const cfg = getPolicyConfig();
+        expect(cfg.minIntervalMsPerTemplate).toBe(5000);
+      } finally {
+        if (original === undefined) delete process.env.APIMEMCP_POLICY_MIN_INTERVAL_MS;
+        else process.env.APIMEMCP_POLICY_MIN_INTERVAL_MS = original;
+        _resetMemoizedConfig();
+      }
     });
 
     it('should allow config override via configurePolicy', async () => {
