@@ -33,6 +33,7 @@ vi.mock('@opentelemetry/sdk-metrics', () => ({
         }),
       })),
     }));
+    this.shutdown = vi.fn(() => Promise.resolve());
   }),
   PeriodicExportingMetricReader: vi.fn(function (this: any, config: any) {
     this.config = config;
@@ -56,6 +57,7 @@ vi.mock('@opentelemetry/sdk-trace-base', () => ({
         end: vi.fn(),
       })),
     }));
+    this.shutdown = vi.fn(() => Promise.resolve());
   }),
   BatchSpanProcessor: vi.fn(function (this: any, exporter: any) {
     this.exporter = exporter;

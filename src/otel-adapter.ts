@@ -27,6 +27,8 @@ let adapterStatus: OtelAdapterStatus = {
 };
 
 let unsubscribeListener: (() => void) | undefined;
+let activeMeterProvider: { shutdown: () => Promise<void> } | undefined;
+let activeTracerProvider: { shutdown: () => Promise<void> } | undefined;
 
 // Lazy-load OTel SDK only when needed and enabled
 async function initOtelSdk(endpoint: string, serviceName: string) {
@@ -39,10 +41,16 @@ async function initOtelSdk(endpoint: string, serviceName: string) {
     // ponytail: SDK initialization path; move if throughput requires non-blocking startup
 
 
+    // The JS OTLP/HTTP exporters use `url` verbatim (no auto-appended signal path) once
+    // it's set explicitly, unlike the OTEL_EXPORTER_OTLP_ENDPOINT env var's own default
+    // behavior -- each signal needs its own /v1/<signal> suffix per the OTLP spec.
+    const metricsEndpoint = `${endpoint.replace(/\/+$/, '')}/v1/metrics`;
+    const tracesEndpoint = `${endpoint.replace(/\/+$/, '')}/v1/traces`;
+
     const meterProvider = new MeterProvider({
       readers: [
         new PeriodicExportingMetricReader({
-          exporter: new OTLPMetricExporter({ url: endpoint }),
+          exporter: new OTLPMetricExporter({ url: metricsEndpoint }),
         }),
       ],
     });
@@ -50,9 +58,15 @@ async function initOtelSdk(endpoint: string, serviceName: string) {
     const tracerProvider = new BasicTracerProvider();
     tracerProvider.addSpanProcessor(
       new BatchSpanProcessor(
-        new OTLPTraceExporter({ url: endpoint })
+        new OTLPTraceExporter({ url: tracesEndpoint })
       )
     );
+
+    // Both readers/processors default to long export intervals (60s metrics, 5s trace
+    // batch) -- shutdownOtelAdapter() needs these references to force a final flush
+    // instead of silently dropping whatever hasn't exported yet.
+    activeMeterProvider = meterProvider;
+    activeTracerProvider = tracerProvider;
 
     const meter = meterProvider.getMeter('apimemcp-metrics');
     const tracer = tracerProvider.getTracer('apimemcp-traces');
@@ -186,6 +200,14 @@ export async function shutdownOtelAdapter(): Promise<void> {
   if (unsubscribeListener) {
     unsubscribeListener();
     unsubscribeListener = undefined;
+  }
+  if (activeMeterProvider) {
+    await activeMeterProvider.shutdown().catch(() => undefined);
+    activeMeterProvider = undefined;
+  }
+  if (activeTracerProvider) {
+    await activeTracerProvider.shutdown().catch(() => undefined);
+    activeTracerProvider = undefined;
   }
   adapterStatus = {
     enabled: false,

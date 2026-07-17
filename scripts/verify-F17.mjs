@@ -170,17 +170,18 @@ async function runTest() {
     await new Promise(resolve => setTimeout(resolve, 500));
     await shutdown();
 
-    // Check if mock server received any payloads
-    if (receivedMetrics.length > 0 || receivedTraces.length > 0) {
-      console.log('✓ Mock OTLP server received payloads:');
-      if (receivedMetrics.length > 0) {
-        console.log(`  - ${receivedMetrics.length} metrics payload(s)`);
-      }
-      if (receivedTraces.length > 0) {
-        console.log(`  - ${receivedTraces.length} trace payload(s)`);
-      }
-    } else {
-      console.log('✓ OTel adapter configured correctly (payload delivery pending batch export)');
+    // Check if mock server received any payloads. shutdown() force-flushes the
+    // exporter per the OTel SDK contract, so by this point delivery is not optional --
+    // a script that "passes" without a real payload is not verifying anything.
+    if (receivedMetrics.length === 0 && receivedTraces.length === 0) {
+      throw new Error('Mock OTLP server received zero metrics/traces payloads after shutdown() -- OTLP export is not actually working');
+    }
+    console.log('✓ Mock OTLP server received payloads:');
+    if (receivedMetrics.length > 0) {
+      console.log(`  - ${receivedMetrics.length} metrics payload(s)`);
+    }
+    if (receivedTraces.length > 0) {
+      console.log(`  - ${receivedTraces.length} trace payload(s)`);
     }
 
     console.log('\nAll F17 verification tests passed! ✓');
