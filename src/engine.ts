@@ -231,6 +231,7 @@ export interface ExecuteExtractionOptions {
   targetUrl: string;
   scriptPath?: string;
   executableScript?: string;
+  captureForensicsOnError?: boolean;
   proxyUrl?: string;
   // ponytail: trusted-operator params, same trust model as targetUrl/proxyUrl above —
   // this is a single-user local tool, not a multi-tenant service. Point cookieString
@@ -318,6 +319,7 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
       }, script);
       return assertJsonSerializable(rawResult);
     } catch (err) {
+      if (options.captureForensicsOnError === false) throw err;
       const message = err instanceof Error ? err.message : String(err);
       try {
         const { screenshotPath, domPath } = await captureForensics(page);

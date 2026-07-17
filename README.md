@@ -348,11 +348,12 @@ Run a registered template against a URL.
 | `templateId` | string, optional | explicit template; if omitted, resolved from `targetUrl`'s domain (in which case `targetUrl` is required) |
 | `connectionId` | string, optional | connected persistent browser profile created by `connect_app`; must match the target domain; cannot be combined with manual cookie input |
 | `proxyUrl` | string, optional | e.g. `http://user:pass@host:port`, passed through to Playwright's `context.newContext({ proxy })` for routing through an authorized egress proxy or testing region-specific rendering. No automated rotation. |
-| `executableScript` | string, optional | inline script for a non-persistent dry-run. When present, it bypasses template lookup and returns `dryRun: true`. |
+| `executableScript` | non-empty string, optional | inline script for a non-persistent dry-run. When present, it bypasses template lookup and returns `dryRun: true`; an explicitly empty value is rejected. |
 | `outputSchema` | JSON Schema object, optional | draft schema validated when the optional schema validator is available; otherwise omitted without failing the dry-run. |
 
 Returns `{ success, data?, error?, meta: { url, templateId, domainMatched, durationMs, timestamp } }`.
-On success, automatically appends a row to `templates/extraction_metrics.csv`
+Registered-template runs automatically append a row to `templates/extraction_metrics.csv`;
+dry-runs persist neither metrics nor any other storage state.
 (see `get_extraction_stats` below) — no separate step required.
 
 If the resolved template was registered as an **action-sequence** (via the recorder

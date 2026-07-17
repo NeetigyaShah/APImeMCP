@@ -62,7 +62,7 @@ export const ExecuteNativeExtractionShape = {
   // supplied, they're also saved for this template so the dashboard can offer to reuse
   // them. Point only at accounts/domains you control.
   cookieString: z.string().optional(),
-  executableScript: z.string().optional(),
+  executableScript: z.string().min(1, 'executableScript must not be empty').optional(),
   outputSchema: z.record(z.unknown()).optional(),
 };
 

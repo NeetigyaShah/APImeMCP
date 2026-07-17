@@ -85,6 +85,7 @@ async function runExtraction(
   executableScript?: string,
   kind = 'extraction'
 ): Promise<ExtractionResult> {
+  const isDryRun = executableScript !== undefined;
   const startedAt = Date.now();
   const buildMeta = (id: string, domainMatched: string, resolvedUrl: string) => ({
     url: resolvedUrl,
@@ -94,19 +95,20 @@ async function runExtraction(
     timestamp: new Date().toISOString(),
   });
 
-  await reportProgress({
-    tool: 'execute_native_extraction',
-    status: 'running',
-    current: 0,
-    total: 1,
-    message: targetUrl ?? templateId ?? '',
-  });
+  if (!isDryRun) {
+    await reportProgress({
+      tool: 'execute_native_extraction',
+      status: 'running',
+      current: 0,
+      total: 1,
+      message: targetUrl ?? templateId ?? '',
+    });
+  }
 
   try {
-    if (executableScript) {
+    if (isDryRun) {
       if (!targetUrl) {
         const error = 'targetUrl is required when executableScript is provided';
-        await reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message: error });
         return { success: false, error, meta: buildMeta('', '', '') };
       }
       const data = await executeExtraction({
@@ -115,9 +117,8 @@ async function runExtraction(
         proxyUrl,
         cookieString,
         simulateLowBandwidth: simulateLowBandwidth ?? true,
+        captureForensicsOnError: false,
       });
-      await logExtractionMetric('', targetUrl, Array.isArray(data) ? data.length : data ? 1 : 0);
-      await reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: targetUrl });
       return { success: true, data, meta: buildMeta('', '', targetUrl) };
     }
     const manifest = await loadManifest();
@@ -216,7 +217,9 @@ async function runExtraction(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logError(`execute_native_extraction failed: ${message}`);
-    await reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message });
+    if (!isDryRun) {
+      await reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message });
+    }
     return { success: false, error: message, meta: buildMeta(templateId ?? '', '', targetUrl ?? '') };
   }
 }
@@ -274,7 +277,7 @@ server.tool('execute_native_extraction', ExecuteNativeExtractionShape, async (in
     undefined,
     input.connectionId,
     input.executableScript,
-    input.executableScript ? 'synthesize-dry-run' : undefined
+    input.executableScript !== undefined ? 'synthesize-dry-run' : undefined
   );
   const schemaValidation =
     input.outputSchema && executeNativeExtractionDeps.validateOutput && result.success
@@ -284,7 +287,7 @@ server.tool('execute_native_extraction', ExecuteNativeExtractionShape, async (in
     content: [
       {
         type: 'text' as const,
-        text: JSON.stringify(input.executableScript ? { ...result, dryRun: true, ...(schemaValidation === undefined ? {} : { schemaValidation }) } : result, null, 2),
+        text: JSON.stringify(input.executableScript !== undefined ? { ...result, dryRun: true, ...(schemaValidation === undefined ? {} : { schemaValidation }) } : result, null, 2),
       },
     ],
     isError: !result.success,

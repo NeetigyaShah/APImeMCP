@@ -79,6 +79,15 @@ describe('ExecuteNativeExtractionInputSchema', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it('rejects an explicitly empty inline script instead of resolving a template', () => {
+    const result = ExecuteNativeExtractionInputSchema.safeParse({
+      targetUrl: 'https://example.com',
+      executableScript: '',
+    });
+
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('ConnectAppInputSchema', () => {
