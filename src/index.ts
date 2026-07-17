@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -73,7 +74,7 @@ function logError(message: string): void {
   process.stderr.write(`[APImeMCP] ERROR: ${message}\n`);
 }
 
-async function runExtraction(
+export async function runExtraction(
   targetUrl?: string,
   templateId?: string,
   proxyUrl?: string,
@@ -533,20 +534,22 @@ async function runCliAddCommand(domain: string): Promise<void> {
   }
 }
 
-const [, , cliCommand, cliArg] = process.argv;
-if (cliCommand === 'add') {
-  if (!cliArg) {
-    console.error('Usage: apimemcp add <domain>');
-    process.exitCode = 1;
-  } else {
-    runCliAddCommand(cliArg).catch((err) => {
-      console.error(`Fatal error: ${err instanceof Error ? err.message : String(err)}`);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const [, , cliCommand, cliArg] = process.argv;
+  if (cliCommand === 'add') {
+    if (!cliArg) {
+      console.error('Usage: apimemcp add <domain>');
       process.exitCode = 1;
+    } else {
+      runCliAddCommand(cliArg).catch((err) => {
+        console.error(`Fatal error: ${err instanceof Error ? err.message : String(err)}`);
+        process.exitCode = 1;
+      });
+    }
+  } else {
+    main().catch((err) => {
+      logError(`Fatal startup error: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
     });
   }
-} else {
-  main().catch((err) => {
-    logError(`Fatal startup error: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
-  });
 }

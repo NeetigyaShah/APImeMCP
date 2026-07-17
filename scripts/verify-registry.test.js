@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeBadge, parseArgs } from './verify-registry.mjs';
+import { computeBadge, parseArgs, verifyEntries } from './verify-registry.mjs';
 
 describe('computeBadge', () => {
   it('marks successful verification as passing', () => {
@@ -26,3 +26,20 @@ describe('parseArgs', () => {
   });
 });
 
+describe('verifyEntries', () => {
+  it('uses the in-process run result metadata without timing the runner', async () => {
+    const records = await verifyEntries({
+      fixed: { templateId: 'fixed', domainPattern: 'example.com', fixedTargetUrl: 'https://example.com' },
+    }, {
+      runEntry: async () => ({
+        success: false,
+        error: 'missing selector',
+        meta: { durationMs: 123, timestamp: '2026-07-17T08:00:00.000Z' },
+      }),
+    });
+
+    expect(records).toEqual([{
+      templateId: 'fixed', ok: false, error: 'missing selector', durationMs: 123, timestamp: '2026-07-17T08:00:00.000Z',
+    }]);
+  });
+});

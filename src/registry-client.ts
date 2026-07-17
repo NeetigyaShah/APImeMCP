@@ -56,21 +56,7 @@ export interface AddFromRegistryResult {
   error?: string;
 }
 
-/**
- * Finds a registry entry matching `domain`, downloads its script file, and registers it
- * locally via the SAME storage functions register_extraction_template/the extension use -
- * no separate registration path to keep in sync. Marks the entry source: 'registry' so
- * engine.ts enforces a network allowlist on it by default (see types.ts's
- * ManifestEntry.source comment) - registry templates are community-contributed, not
- * authored by this operator, so they don't get the same unrestricted trust.
- */
-export async function addFromRegistry(domain: string): Promise<AddFromRegistryResult> {
-  const manifest = await fetchRegistryManifest();
-  const entry = findRegistryEntryForDomain(manifest, domain);
-  if (!entry) {
-    return { templateId: '', registered: false, error: `No registry template found for domain "${domain}"` };
-  }
-
+export async function registerRegistryEntry(entry: ManifestEntry): Promise<AddFromRegistryResult> {
   let contents: string;
   try {
     contents = await fetchRegistryTemplateSource(entry);
@@ -79,14 +65,11 @@ export async function addFromRegistry(domain: string): Promise<AddFromRegistryRe
     return { templateId: entry.templateId, registered: false, error: message };
   }
 
-  const isAction = entry.kind === 'action-sequence';
-
   try {
-    if (isAction) {
-      const sequence = JSON.parse(contents) as ActionSequence;
+    if (entry.kind === 'action-sequence') {
       await registerActionSequenceTemplate({
         templateId: entry.templateId,
-        sequence,
+        sequence: JSON.parse(contents) as ActionSequence,
         source: 'registry',
         contributedBy: entry.contributedBy,
       });
@@ -108,4 +91,22 @@ export async function addFromRegistry(domain: string): Promise<AddFromRegistryRe
   }
 
   return { templateId: entry.templateId, registered: true };
+}
+
+/**
+ * Finds a registry entry matching `domain`, downloads its script file, and registers it
+ * locally via the SAME storage functions register_extraction_template/the extension use -
+ * no separate registration path to keep in sync. Marks the entry source: 'registry' so
+ * engine.ts enforces a network allowlist on it by default (see types.ts's
+ * ManifestEntry.source comment) - registry templates are community-contributed, not
+ * authored by this operator, so they don't get the same unrestricted trust.
+ */
+export async function addFromRegistry(domain: string): Promise<AddFromRegistryResult> {
+  const manifest = await fetchRegistryManifest();
+  const entry = findRegistryEntryForDomain(manifest, domain);
+  if (!entry) {
+    return { templateId: '', registered: false, error: `No registry template found for domain "${domain}"` };
+  }
+
+  return registerRegistryEntry(entry);
 }

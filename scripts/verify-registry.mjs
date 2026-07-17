@@ -54,19 +54,14 @@ export async function verifyEntries(manifest, { only, concurrency = 4, runEntry 
         records[index] = { templateId, ok: false, durationMs: 0, timestamp: new Date().toISOString(), skipped: 'no-fixed-target' };
         continue;
       }
-      const startedAt = Date.now();
-      try {
-        await runEntry(templateId, entry);
-        records[index] = { templateId, ok: true, durationMs: Date.now() - startedAt, timestamp: new Date().toISOString() };
-      } catch (error) {
-        records[index] = {
-          templateId,
-          ok: false,
-          durationMs: Date.now() - startedAt,
-          timestamp: new Date().toISOString(),
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
+      const result = await runEntry(templateId, entry);
+      records[index] = {
+        templateId,
+        ok: result.success,
+        durationMs: result.meta.durationMs,
+        timestamp: result.meta.timestamp,
+        ...(result.error ? { error: result.error } : {}),
+      };
     }
   }
 
@@ -94,45 +89,36 @@ export async function writeBadgeFiles(records, { out, dryRun, atomicWriteFile, n
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const [{ fetchRegistryManifest, fetchRegistryTemplateSource, listVerifiable }, { initBrowser, closeBrowser, executeActionSequence, executeExtraction, REGISTRY_CDN_ALLOWLIST }, { atomicWriteFile }, { withLock }, { sendNotification }] =
+  const outputDirectory = path.resolve(options.out);
+  const [{ fetchRegistryManifest, listVerifiable, registerRegistryEntry }, { initBrowser, closeBrowser }, { runExtraction }, { ensureStorageInitialized, atomicWriteFile }, { withLock }, { sendNotification }] =
     await Promise.all([
       import('../dist/registry-client.js'),
       import('../dist/engine.js'),
+      import('../dist/index.js'),
       import('../dist/storage.js'),
       import('../dist/lock.js'),
       import('../dist/notifier.js'),
     ]);
   const manifest = await fetchRegistryManifest();
-  const verifiable = new Set(listVerifiable(manifest).map(([templateId]) => templateId));
   const scratchDir = await fs.mkdtemp(path.join(os.tmpdir(), 'apimemcp-registry-verify-'));
 
-  await initBrowser();
   try {
+    process.chdir(scratchDir);
+    await ensureStorageInitialized();
+    for (const [, entry] of listVerifiable(manifest)) {
+      const registration = await registerRegistryEntry(entry);
+      if (!registration.registered) throw new Error(registration.error);
+    }
+    await initBrowser();
     const records = await withLock(() => verifyEntries(manifest, {
       only: options.only,
       concurrency: options.concurrency,
       runEntry: async (templateId, entry) => {
-        if (!verifiable.has(templateId) || !entry.fixedTargetUrl) return;
-        const extension = entry.kind === 'action-sequence' ? 'json' : 'js';
-        const scriptPath = path.join(scratchDir, `${templateId}.${extension}`);
-        await atomicWriteFile(scriptPath, await fetchRegistryTemplateSource(entry));
-        const networkAllowlist = [entry.domainPattern, ...REGISTRY_CDN_ALLOWLIST];
-        if (entry.kind === 'action-sequence') {
-          await executeActionSequence({ sequence: JSON.parse(await fs.readFile(scriptPath, 'utf8')), networkAllowlist });
-          return;
-        }
-        await executeExtraction({
-          targetUrl: entry.fixedTargetUrl,
-          scriptPath,
-          simulateLowBandwidth: true,
-          waitStrategy: entry.waitStrategy,
-          readySelector: entry.readySelector,
-          networkAllowlist,
-        });
+        return runExtraction(entry.fixedTargetUrl, templateId, undefined, undefined, true);
       },
     }));
     await writeBadgeFiles(records, {
-      out: path.resolve(options.out),
+      out: outputDirectory,
       dryRun: options.dryRun,
       atomicWriteFile,
       notifyTransition: process.env.VERIFY_NOTIFY_URL
@@ -141,7 +127,7 @@ async function main() {
     });
     for (const record of records) console.log(`${record.templateId}: ${computeBadge([record]).message}`);
   } finally {
-    await closeBrowser();
+    if (process.cwd() === scratchDir) await closeBrowser();
     await fs.rm(scratchDir, { recursive: true, force: true });
   }
 }
@@ -152,4 +138,3 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.exitCode = 1;
   });
 }
-
