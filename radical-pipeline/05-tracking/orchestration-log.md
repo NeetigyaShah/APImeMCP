@@ -27,6 +27,7 @@
 - F03 re-review reported `npm run lint` unavailable. The repository has no lint script at baseline; per the governing G1 definition (`npm run build` plus `npm test`), this is recorded as a tooling gap rather than an F03 regression. Its repaired runner wiring uses exported `runExtraction` and the agreed G1/G2/G5/G6 checks pass.
 - F14 G2 rejected `d860680`: unknown-template failures return before `executeMeasured`, so no JSONL SLA measurement exists and the calculated success rate is biased. A fresh F14 repair builder is required.
 - F01 final G3 rejected `b4decfe`: while schema validation is now at the engine boundary, `src/index.ts` still owns extraction orchestration and inline tool handlers. This exposes the uncompleted ADR-02 Wave 0 boundary; a fresh F01 architecture-repair builder is required.
+- F22 G2 rejected `9109a2d`: its discovery registration passes an inline dependency object instead of appending dependencies to the single shared `deps` object, violating ADR-02. A fresh F22 repair builder is required.
 
 ## Agent Failures
 
