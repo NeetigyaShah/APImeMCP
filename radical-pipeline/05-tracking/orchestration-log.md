@@ -37,6 +37,16 @@
 - F19 final review rejected `fe5f0a4`: its workflow lints the registry default branch rather than incoming PR inputs (and would fail against the current legacy manifest), while `verify-F19` bypasses the shipped registry driver and its own fixtures/CLI/lint path. A fresh focused repair is required.
 - Tracker correction: F03, F05, and F19 were merged and verified but retained pre-merge overall states because their G7 update omitted `--overall Done`. Their statuses and generated workbook are corrected together after the Wave 1 merge checkpoint.
 
+## 2026-07-17 - Program 1 / Wave 1 Checkpoint
+
+- F00, F01, F03, F05, F14, and F19 are merged to `integration`; the combined root build, test suite, feature verifiers, and F19 package dry-run are green. `master` remains unchanged.
+- `npm test` excludes `.claude/worktrees/**` so isolated, unmerged feature tests cannot contaminate the integration gate.
+- Program 1 tracker completion is 6/26 (23.1%). F22 has passed its independent review but remains unmerged until Wave 2's F02 foundation is integrated.
+
+## 2026-07-17 - Program 1 / Wave 2 In Progress
+
+- Fresh isolated builders own F02 (`feat/F02-drift-detection`), F10 (`feat/F10-transform-layer`), F16 (`feat/F16-result-cache`), and F23 (`feat/F23-golden-snapshots`).
+
 ## Agent Failures
 
 - Multiple builders and reviewers stalled during `npx skills check` or read-only review despite no required F00 skill installation. Their uncommitted work was retained or their agent was closed before replacement.
