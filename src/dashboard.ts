@@ -11,7 +11,14 @@ import { buildUsageMarkdown, renderDocsPage, getUsagePath } from './usage.js';
 import { templatesWithSavedCookies, saveCookies } from './cookie-store.js';
 import { getProgress, reportDashboardStatus } from './progress.js';
 import type { Scheduler, ScheduledJob } from './scheduler.js';
-import type { DashboardSection } from './dashboard-sections/types.js';
+import type { DashboardSection, TileSummary } from './dashboard-sections/types.js';
+import { pipelinesSection } from './dashboard-sections/pipelines.js';
+import { monitorsSection } from './dashboard-sections/monitors.js';
+import { selfHealSection } from './dashboard-sections/self-heal.js';
+import { vaultSection } from './dashboard-sections/vault.js';
+import { policySection } from './dashboard-sections/policy.js';
+import { observabilitySection } from './dashboard-sections/observability.js';
+import { discoverSection } from './dashboard-sections/discover.js';
 import { loadSnapshot } from './snapshot.js';
 
 const DASHBOARD_PORT = 3000;
@@ -33,6 +40,10 @@ export interface DashboardDeps {
   isBrowserReady: () => boolean;
   log: (message: string) => void;
   logError: (message: string) => void;
+  // Added for the dashboard redesign -- same objects already assembled in index.ts
+  // for the MCP tool registrations (pipelineDeps, deps.discovery); reused, not duplicated.
+  pipelineDeps: import('./pipeline.js').PipelineDeps;
+  discovery: import('./discovery.js').DiscoveryDeps;
 }
 
 interface LogEntry {
@@ -121,10 +132,8 @@ function cronColumns(expr: string): string[] {
   return parts.slice(0, 5);
 }
 
-function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: Set<string>): string {
-  const templates = Object.values(manifest);
-
-  const templateRows = templates
+function buildTemplateRows(templates: Manifest[keyof Manifest][], cookieSet: Set<string>): string {
+  return templates
     .map(
       (entry) => `
       <div class="row" data-template-id="${entry.templateId}" ${entry.fixedTargetUrl ? 'data-fixed-target="1"' : ''}>
@@ -180,7 +189,160 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
       </div>`
     )
     .join('\n');
+}
 
+function renderTemplatesSection(templates: Manifest[keyof Manifest][], cookieSet: Set<string>): string {
+  const rows = buildTemplateRows(templates, cookieSet);
+  return `
+    <section>
+      <h2>Templates</h2>
+      <div class="panel" id="templates-panel">
+        ${rows || '<div class="empty">No templates registered yet. Use register_extraction_template.</div>'}
+      </div>
+    </section>
+    <script>window.init_templates = function () { loadTemplates(); };</script>`;
+}
+
+function renderStatsSection(): string {
+  return `
+    <section>
+      <h2>Extraction stats</h2>
+      <div class="printout" id="stats">
+        <table class="crontab">
+          <thead><tr><th>template</th><th>runs</th><th>success rate</th><th>p95 latency</th><th>drift</th><th>snapshot</th><th>last run</th></tr></thead>
+          <tbody><tr><td colspan="7" class="empty">No extraction measures yet.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    <script>
+      window.init_stats = function () {
+        (async function pollStatsOnce() {
+          try {
+            const res = await fetch('/api/stats');
+            const payload = await res.json();
+            const body = document.querySelector('#stats tbody');
+            if (!payload.templates.length) return;
+            body.innerHTML = payload.templates.map(function (sla) {
+              return '<tr data-template-id="' + sla.templateId + '"><td>' + sla.templateId + '</td><td>' + sla.runs + '</td><td>' +
+                Math.round(sla.successRate * 100) + '%</td><td>' + Math.round(sla.p95DurationMs) +
+                ' ms</td><td data-drift-count="' + sla.driftCount + '">' + sla.driftCount + (sla.lastDriftAt ? ' (last ' + new Date(sla.lastDriftAt).toLocaleString() + ')' : '') +
+                (sla.driftEntries && sla.driftEntries.length ? '<br><span class="dim">' + sla.driftEntries.map(function (entry) { return entry.kind + ':' + entry.path; }).join(', ') + '</span>' : '') +
+                '</td><td>' + (sla.hasSnapshot ? 'recorded' : 'none') + '</td><td>' + new Date(sla.lastRunAt).toLocaleString() + '</td></tr>';
+            }).join('');
+          } catch {
+            // non-fatal
+          }
+        })();
+      };
+      if (!window._statsInterval) window._statsInterval = setInterval(function () { if (typeof window.init_stats === 'function') window.init_stats(); }, 5000);
+    </script>`;
+}
+
+function renderJobsSection(): string {
+  return `
+    <section>
+      <h2>Scheduled jobs</h2>
+      <div class="panel">
+        <table class="crontab">
+          <thead>
+            <tr><th>min</th><th>hr</th><th>dom</th><th>mon</th><th>dow</th><th>target</th><th>template</th></tr>
+          </thead>
+          <tbody id="jobs-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+        </table>
+        <form class="job-form" id="job-form">
+          <input type="text" name="targetUrl" placeholder="https://example.com/page" required />
+          <input type="text" name="templateId" placeholder="templateId (optional)" />
+          <input type="text" name="cronExpression" placeholder="0 * * * * (min hr dom mon dow)" required />
+          <button type="submit" class="btn">Schedule</button>
+        </form>
+        <div class="form-status" id="job-form-status"></div>
+      </div>
+    </section>
+    <script>
+      window.init_jobs = function () {
+        async function loadJobs() {
+          const body = document.getElementById('jobs-body');
+          try {
+            const res = await fetch('/api/jobs');
+            const jobs = await res.json();
+            if (!jobs.length) {
+              body.innerHTML = '<tr><td colspan="7" class="empty">No scheduled jobs yet.</td></tr>';
+              return;
+            }
+            body.innerHTML = jobs.map(function (j) {
+              var parts = j.cronExpression.trim().split(/\\s+/);
+              while (parts.length < 5) parts.push('*');
+              return '<tr>' + parts.slice(0, 5).map(function (p) { return '<td class="cron-field">' + p + '</td>'; }).join('') +
+                '<td>' + j.targetUrl + '</td><td>' + (j.templateId || '<span class="dim">auto</span>') + '</td></tr>';
+            }).join('');
+          } catch {
+            body.innerHTML = '<tr><td colspan="7" class="empty">Could not load jobs.</td></tr>';
+          }
+        }
+        document.getElementById('job-form').addEventListener('submit', async function (e) {
+          e.preventDefault();
+          const form = e.target;
+          const status = document.getElementById('job-form-status');
+          const payload = {
+            targetUrl: form.targetUrl.value.trim(),
+            cronExpression: form.cronExpression.value.trim(),
+            templateId: form.templateId.value.trim() || undefined,
+          };
+          status.textContent = 'Scheduling...';
+          try {
+            const res = await fetch('/api/jobs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              status.textContent = 'Error: ' + (data.error || 'could not schedule job');
+              return;
+            }
+            status.textContent = 'Scheduled ' + data.jobId;
+            form.reset();
+            loadJobs();
+          } catch (err) {
+            status.textContent = 'Request failed: ' + err.message;
+          }
+        });
+        loadJobs();
+      };
+    </script>`;
+}
+
+function renderForensicsSection(): string {
+  return `
+    <section>
+      <h2>Forensic captures</h2>
+      <div class="panel" id="logs-body">
+        <div class="empty">Loading…</div>
+      </div>
+    </section>
+    <script>
+      window.init_forensics = async function () {
+        const el = document.getElementById('logs-body');
+        try {
+          const res = await fetch('/api/logs');
+          const logs = await res.json();
+          if (!logs.length) {
+            el.innerHTML = '<div class="empty">No failures captured yet — that\\'s a good sign.</div>';
+            return;
+          }
+          el.innerHTML = logs.map(function (l) {
+            return '<div class="log-item"><span class="mono dim">' + l.prefix + '</span>' +
+              (l.screenshotUrl ? '<a href="' + l.screenshotUrl + '" target="_blank">screenshot</a>' : '') +
+              (l.domUrl ? '<a href="' + l.domUrl + '" target="_blank">dom</a>' : '') + '</div>';
+          }).join('');
+        } catch {
+          el.innerHTML = '<div class="empty">Could not load logs.</div>';
+        }
+      };
+    </script>`;
+}
+
+function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: Set<string>): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -456,7 +618,7 @@ async function pollProgress() {
   }
 }
 
-let knownTemplateIds = ${JSON.stringify(templates.map((t) => t.templateId).sort())};
+let knownTemplateIds = ${JSON.stringify(Object.values(manifest).map((t) => t.templateId).sort())};
 
 function templateRowHtml(entry) {
   const fixed = !!entry.fixedTargetUrl;
@@ -653,12 +815,49 @@ export function startDashboard(deps: DashboardDeps): void {
     res.json(Object.values(await loadManifest()).map((e) => ({ ...e, hasSavedCookies: cookieSet.has(e.templateId) })));
   });
 
-  // Populated by the integration task once all section modules exist.
-  const sections: Record<string, DashboardSection> = {};
+  const sections: Record<string, DashboardSection> = Object.fromEntries(
+    [pipelinesSection, monitorsSection, selfHealSection, vaultSection, policySection, observabilitySection, discoverSection]
+      .map((s) => [s.id, s])
+  );
+  for (const section of Object.values(sections)) {
+    section.registerRoutes(app, deps);
+  }
+
+  // The four pre-redesign sections predate the DashboardSection pattern -- they're
+  // built-in rather than pluggable, so they're wired directly here instead of through
+  // the `sections` map above.
+  app.get('/api/section/templates', async (_req, res) => {
+    const manifest = await loadManifest();
+    res.type('html').send(renderTemplatesSection(Object.values(manifest), await templatesWithSavedCookies()));
+  });
+  app.get('/api/section/stats', (_req, res) => {
+    res.type('html').send(renderStatsSection());
+  });
+  app.get('/api/section/jobs', (_req, res) => {
+    res.type('html').send(renderJobsSection());
+  });
+  app.get('/api/section/forensics', (_req, res) => {
+    res.type('html').send(renderForensicsSection());
+  });
 
   app.get('/api/dashboard-summary', async (_req, res) => {
-    const summaries = await Promise.all(Object.values(sections).map((s) => s.getTileSummary(deps)));
-    res.json(summaries);
+    const [manifest, sla, jobs, logs] = await Promise.all([
+      loadManifest(),
+      getAllSla(),
+      Promise.resolve(deps.scheduler.list()),
+      listForensicLogs(),
+    ]);
+    const templateCount = Object.keys(manifest).length;
+    const runningNow = (await getProgress())?.status === 'running';
+    const avgSuccessRate = sla.length ? sla.reduce((sum, s) => sum + s.successRate, 0) / sla.length : undefined;
+    const builtIn: TileSummary[] = [
+      { id: 'templates', label: 'Templates', glance: `${templateCount} registered`, dotState: runningNow ? 'pulse' : 'idle' },
+      { id: 'stats', label: 'Extraction Stats', glance: avgSuccessRate !== undefined ? `${Math.round(avgSuccessRate * 100)}% success` : 'no runs yet', dotState: 'idle' },
+      { id: 'jobs', label: 'Scheduled Jobs', glance: `${jobs.length} jobs`, dotState: 'idle' },
+      { id: 'forensics', label: 'Forensic Captures', glance: `${logs.length} failures`, dotState: logs.length ? 'alert' : 'idle' },
+    ];
+    const pluggable = await Promise.all(Object.values(sections).map((s) => s.getTileSummary(deps)));
+    res.json([...builtIn, ...pluggable]);
   });
 
   app.get('/api/section/:id', async (req, res) => {

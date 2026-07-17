@@ -240,7 +240,7 @@ async function main(): Promise<void> {
   await startConfiguredAppConnections();
   await scheduler.loadPersisted();
   initOtelAdapter();
-  startDashboard({ runExtraction, scheduler, isBrowserReady, log, logError });
+  startDashboard({ runExtraction, scheduler, isBrowserReady, log, logError, pipelineDeps, discovery: deps.discovery });
   void checkForUpdates().then((status) => {
     updateStatus = status;
     if (status.updateAvailable) log('UPDATE AVAILABLE: A newer version of the server is available on GitHub. Please pull the latest changes.');

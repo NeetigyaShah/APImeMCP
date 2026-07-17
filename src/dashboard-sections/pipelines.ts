@@ -61,13 +61,13 @@ export function renderPipelinesPanel(defs: PipelineDef[]): string {
 export const pipelinesSection: DashboardSection = {
   id: 'pipelines',
   label: 'Pipelines',
-  registerRoutes(app, deps: DashboardDeps & { listPipelineDefs?: typeof listPipelineDefs }) {
+  registerRoutes(app, deps: DashboardDeps) {
     app.get('/api/section/pipelines', (_req, res) => {
       res.type('html').send(renderPipelinesPanel(listPipelineDefs()));
     });
     app.post('/api/pipelines/:pipelineId/run', async (req, res) => {
       try {
-        const result = await runPipeline(req.params.pipelineId, req.body ?? {}, deps as any);
+        const result = await runPipeline(req.params.pipelineId, req.body ?? {}, deps.pipelineDeps);
         res.json(result);
       } catch (err) {
         res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });

@@ -49,7 +49,7 @@ export const discoverSection: DashboardSection = {
   id: 'discover',
   label: 'Discover',
   registerRoutes(app, deps) {
-    const discoveryDeps = (deps as unknown as { discovery: DiscoveryDeps }).discovery;
+    const discoveryDeps = deps.discovery;
     app.get('/api/section/discover', (_req, res) => {
       res.type('html').send(renderDiscoverPanel());
     });
