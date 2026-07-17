@@ -3,11 +3,26 @@
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
+
+// spawnSync blocks this process's event loop -- fatal when the child needs to reach
+// back into a server (like the fixture HTTP server below) running in this same process.
+// Use this instead for anything that talks to our own server while running.
+function spawnAsync(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('error', reject);
+    child.on('close', (status) => resolve({ status, stdout, stderr }));
+  });
+}
 
 // Fixture HTML
 const fixtureHtml = `
@@ -53,46 +68,44 @@ function startMeasurementServer() {
 }
 
 async function runExtractionViaNode(templateId, targetUrl, kind = 'static-http') {
+  // Only pay Chromium startup cost on the Playwright comparison path -- the whole point
+  // of static-http is that it never launches a browser, so measuring it fairly (and
+  // avoiding whatever hang/resource contention repeatedly launching Chromium here caused)
+  // means skipping initBrowser()/closeBrowser() entirely on the static-http path.
   const script = `
     import { initBrowser, closeBrowser, executeStaticHttpExtraction, executeExtraction } from './dist/engine.js';
     import { findTemplateById, loadManifest } from './dist/storage.js';
 
-    await initBrowser();
-    try {
-      const manifest = await loadManifest();
-      const entry = findTemplateById(manifest, '${templateId}');
+    const manifest = await loadManifest();
+    const entry = findTemplateById(manifest, '${templateId}');
+    if (!entry) {
+      throw new Error('Template not found: ${templateId}');
+    }
 
-      if (!entry) {
-        throw new Error('Template not found: ${templateId}');
-      }
-
+    if (entry.kind === 'static-http') {
       const startMs = Date.now();
-      let result;
-      if (entry.kind === 'static-http') {
-        result = await executeStaticHttpExtraction(entry, '${targetUrl}');
-      } else {
-        result = await executeExtraction({
+      const result = await executeStaticHttpExtraction(entry, '${targetUrl}');
+      const durationMs = Date.now() - startMs;
+      console.log(JSON.stringify({ result, durationMs }));
+    } else {
+      await initBrowser();
+      try {
+        const startMs = Date.now();
+        const result = await executeExtraction({
           targetUrl: '${targetUrl}',
           scriptPath: entry.scriptPath,
         });
+        const durationMs = Date.now() - startMs;
+        console.log(JSON.stringify({ result, durationMs }));
+      } finally {
+        await closeBrowser();
       }
-      const durationMs = Date.now() - startMs;
-
-      console.log(JSON.stringify({ result, durationMs }));
-    } finally {
-      await closeBrowser();
     }
   `;
 
-  const result = spawnSync('node', ['--input-type=module', '--eval', script], {
+  const result = await spawnAsync('node', ['--input-type=module', '--eval', script], {
     cwd: projectRoot,
-    encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'pipe'],
   });
-
-  if (result.error) {
-    throw result.error;
-  }
 
   if (result.status !== 0) {
     console.error('stderr:', result.stderr);
@@ -122,9 +135,8 @@ async function registerTemplate(templateId, kind, targetUrl, script) {
     console.log(JSON.stringify({ success: true, templateId: entry.templateId }));
   `;
 
-  const result = spawnSync('node', ['--input-type=module', '--eval', cmd], {
+  const result = await spawnAsync('node', ['--input-type=module', '--eval', cmd], {
     cwd: projectRoot,
-    encoding: 'utf8',
   });
 
   if (result.status !== 0) {
@@ -150,6 +162,7 @@ async function main() {
     const buildResult = spawnSync('npm', ['run', 'build'], {
       cwd: projectRoot,
       stdio: 'inherit',
+      shell: true,
     });
 
     if (buildResult.status !== 0) {
