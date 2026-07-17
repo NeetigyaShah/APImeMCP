@@ -19,6 +19,7 @@ import {
   resolveProfileDir,
 } from './app-connections.js';
 import type { AppConnection } from './types.js';
+import { resolveSecretsForRun, redactSecrets } from './vault.js';
 
 const DEFAULT_WAIT_STRATEGY: WaitStrategy = 'domcontentloaded';
 
@@ -237,13 +238,16 @@ function createBrowserContext(proxyUrl?: string): Promise<BrowserContext> {
   });
 }
 
-export async function captureForensics(page: Page): Promise<ForensicPaths> {
+export async function captureForensics(page: Page, redactionFn?: (text: string) => string): Promise<ForensicPaths> {
   const logsDir = path.join('output', 'logs');
   await fs.mkdir(logsDir, { recursive: true });
   const prefix = `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`;
   const screenshotPath = path.join(logsDir, `${prefix}-screenshot.png`);
   const domPath = path.join(logsDir, `${prefix}-dom.html`);
-  const html = await page.content();
+  let html = await page.content();
+  if (redactionFn) {
+    html = redactionFn(html);
+  }
   await page.screenshot({ path: screenshotPath, fullPage: true });
   await fs.writeFile(domPath, html);
   return { screenshotPath, domPath, html };
@@ -311,6 +315,8 @@ export interface ExecuteExtractionOptions {
   // as today).
   networkAllowlist?: string[];
   onNetworkRequest?: (url: string) => void;
+  // F13: Vault secret references. Maps field names to vault entry ids or subkeys.
+  secretInputs?: Record<string, string>;
 }
 
 export async function executeExtraction(options: ExecuteExtractionOptions): Promise<unknown> {
@@ -359,6 +365,8 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
     });
     const page = await context.newPage();
     page.on('request', (request) => options.onNetworkRequest?.(request.url()));
+    // F13: Resolve vault secrets if specified
+    let resolvedSecrets: Record<string, string> | undefined;
     try {
       const response = await page.goto(options.targetUrl, {
         timeout: NAVIGATION_TIMEOUT_MS,
@@ -369,13 +377,17 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
       }
       const script = options.executableScript ?? (options.scriptPath ? await fs.readFile(path.resolve(process.cwd(), options.scriptPath), 'utf8') : undefined);
       if (!script) throw new Error('scriptPath or executableScript is required');
+
+      if (options.secretInputs && Object.keys(options.secretInputs).length > 0) {
+        resolvedSecrets = await resolveSecretsForRun(options.secretInputs);
+      }
       // ponytail: page.evaluate(stringExpression) does NOT auto-invoke a bare function
       // expression (verified live: `page.evaluate('() => 42')` returns undefined, not 42) -
       // it only awaits a promise if the expression's own evaluation already produced one.
       // Templates are written either way (bare `async () => {...}` or a self-invoking
       // `(async () => {...})()`), so eval the source in-page and call it only if it's
       // still a function, rather than picking one convention and breaking the other.
-      const rawResult = await page.evaluate(async ({ src, evaluatorSource, status }: { src: string; evaluatorSource: string; status?: number }) => {
+      const rawResult = await page.evaluate(async ({ src, evaluatorSource, status, secrets }: { src: string; evaluatorSource: string; status?: number; secrets?: Record<string, string> }) => {
         const browser = globalThis as unknown as { location: { href: string }; document: { title: string } };
         class CelSyntaxError extends Error {
           constructor(message: string) {
@@ -385,7 +397,7 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
         }
         // eslint-disable-next-line no-eval
         const evaluateCel = (0, eval)(`(${evaluatorSource})`);
-        const vars: Record<string, unknown> = {};
+        const vars: Record<string, unknown> = secrets ? { ...secrets } : {};
         let lastResult: unknown;
         const cel = (expression: string) => evaluateCel(expression, {
           vars,
@@ -398,13 +410,15 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
         const value = eval(src);
         lastResult = await (typeof value === 'function' ? value() : value);
         return lastResult;
-      }, { src: script, evaluatorSource: evaluateCel.toString(), status: response?.status() });
+      }, { src: script, evaluatorSource: evaluateCel.toString(), status: response?.status(), secrets: resolvedSecrets });
       return assertJsonSerializable(rawResult);
     } catch (err) {
       if (options.captureForensicsOnError === false) throw err;
       const message = err instanceof Error ? err.message : String(err);
       try {
-        const { screenshotPath, domPath } = await captureForensics(page);
+        // F13: Apply redaction before capturing forensics
+        const redactionFn = resolvedSecrets ? (text: string) => redactSecrets(text, resolvedSecrets!) : undefined;
+        const { screenshotPath, domPath } = await captureForensics(page, redactionFn);
         throw new Error(`Extraction failed: ${message} (forensic artifacts: ${screenshotPath}, ${domPath})`);
       } catch (captureErr) {
         if (captureErr instanceof Error && captureErr.message.startsWith('Extraction failed:')) {
@@ -414,6 +428,13 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
         throw err;
       }
     } finally {
+      // F13: Discard resolved secrets from memory (prevent any leakage)
+      if (resolvedSecrets) {
+        for (const key of Object.keys(resolvedSecrets)) {
+          resolvedSecrets[key] = '';
+        }
+      }
+      resolvedSecrets = undefined;
       if (persistentContext) await page.close().catch(() => undefined);
     }
   } finally {
