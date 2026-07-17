@@ -67,6 +67,22 @@
 - F08 reviewer 019f7004-5f1c-77f1-8ece-5652407f5170 returned a checkpoint with G1 still pending and executed no required gates. Handoff rejected; fresh reviewer required. No source finding was produced.
 - F07 G3 failed on reviewer 019f700a-03c2-7663-a1d1-46c582af6682: ADR-02/F07 �3 violation in src/index.ts (two import edits, pipelineDeps, and three registrations rather than the allowed three appended registration lines). G1/G2 passed; G6 correctly skipped. Fresh repair builder required.
 - F08 G2 failed on reviewer 019f7009-d11f-7802-8af4-2756d6516b0a: src/usage.ts emits a non-async page.evaluate callback containing await, making generated standalone apis/<id>.mjs scripts invalid. G1/G3/G6 passed. Fresh repair builder required.
+
+## 2026-07-17 - F13 credential-vault
+
+- Engine Builder claimed F13 and completed implementation of encrypted credential vault (AES-256-GCM) in isolated worktree.
+- Implemented src/vault.ts with setVaultSecret, listVaultSecrets, deleteVaultSecret, resolveSecretsForRun, redactSecrets.
+- Master key bootstrap: auto-generated to templates/.vault-key (0600 perms) or from APIMEMCP_VAULT_KEY env var (base64, 32 bytes).
+- Storage: templates/vault.json with entries keyed by id, each containing iv, ciphertext, authTag (all base64), algo, keyId, timestamps.
+- Engine integration: secretInputs resolved just-in-time before page.evaluate, injected into script context, discarded after run in finally block.
+- Forensics redaction: captureForensics accepts optional redactionFn, applies it before writing DOM snapshot to disk.
+- MCP tools registered per ADR-02: three registerXxxTool functions, three append-only lines in index.ts.
+- VaultEntry, VaultStore, and secretInputs? field added to types.ts (ManifestEntry).
+- Unit tests: 12 tests covering encrypt/decrypt round-trips, tamper detection, metadata-only listings, sub-key resolution, delete/retry, redaction, label handling, and createdAt persistence. All pass.
+- Verify script: scripts/verify-F13.mjs + fixtures/vault-login.html for integration testing (not yet run live against Playwright).
+- G1 (build/test) clean: npm run build passes, 12 vault tests + 164 total tests pass (1 pre-existing unrelated failure in usage.test.ts).
+- Status updated to currentGate=G2, subtasks S0-S6/S8 marked Done, S9 In-Review, S11 pending merge.
+- Commit 7dcdfb1 feat(F13): Encrypted credential vault with AES-256-GCM storage.
 - F04 reviewer 019f700b-5d2d-7d22-8ae8-0f9afa31d487 stalled without gate evidence after recovery directives; closed and requires a fresh reviewer.
 - F06 reviewer 019f7010-a274-78d0-babe-b3fa3c1b5681 stalled without gate evidence after recovery directives; closed and requires a fresh reviewer.
 - F07 repair builder 019f7011-977f-7f61-847b-0474f67b9029 stalled without implementing the recorded ADR-02 repair; closed and requires a fresh builder.
