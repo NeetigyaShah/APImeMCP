@@ -475,6 +475,120 @@ async function runActionStep(page: Page, step: ActionStep): Promise<void> {
   throw new Error(`no working selector for ${step.type} (tried: ${selectors.join(', ') || 'none provided'})`);
 }
 
+// F09: Execute a write flow - form-fill + submit from transformed input data
+export interface ExecuteWriteFlowOptions {
+  targetUrl: string;
+  templateId: string;
+  writeScript: string;
+  input: unknown;
+  connectionId?: string;
+  proxyUrl?: string;
+  cookieString?: string;
+  writeInputSchema?: Record<string, unknown>;
+  dryRun?: boolean;
+  waitStrategy?: WaitStrategy;
+  readySelector?: string;
+  networkAllowlist?: string[];
+}
+
+export async function executeWriteFlow(options: ExecuteWriteFlowOptions): Promise<{
+  success: boolean;
+  input: unknown;
+  dryRun: boolean;
+  error?: string;
+  forensicsPath?: string;
+}> {
+  // Validate input schema if present
+  if (options.writeInputSchema) {
+    const schemaValidation = validateOutput(options.input, options.writeInputSchema);
+    if (schemaValidation.valid === false) {
+      throw new Error(`Write input failed schema validation: ${schemaValidation.errors?.join(', ') ?? 'Unknown validation error'}`);
+    }
+  }
+
+  const persistentContext = options.connectionId ? await ensureAppContext(options.connectionId) : undefined;
+  const context = persistentContext ?? (await createBrowserContext(options.proxyUrl));
+
+  try {
+    if (options.cookieString) {
+      await context.addCookies(parseCookieString(options.cookieString, options.targetUrl));
+    }
+    if (options.networkAllowlist) {
+      const allowlist = options.networkAllowlist;
+      await context.route('**/*', (route) => {
+        let hostname: string;
+        try {
+          hostname = new URL(route.request().url()).hostname.toLowerCase();
+        } catch {
+          void route.abort();
+          return;
+        }
+        if (hostMatchesAllowlist(hostname, allowlist)) {
+          void route.continue();
+        } else {
+          void route.abort();
+        }
+      });
+    }
+
+    const page = await context.newPage();
+    try {
+      await page.goto(options.targetUrl, {
+        timeout: NAVIGATION_TIMEOUT_MS,
+        waitUntil: options.waitStrategy ?? DEFAULT_WAIT_STRATEGY,
+      });
+      if (options.readySelector) {
+        await page.waitForSelector(options.readySelector, { timeout: NAVIGATION_TIMEOUT_MS });
+      }
+
+      // Execute the write script - it receives the input data and fills/submits the form
+      // When dryRun=true, the script should fill the form but NOT submit
+      const result = await page.evaluate(
+        async ({ src, input, dryRun }: { src: string; input: unknown; dryRun: boolean }) => {
+          // eslint-disable-next-line no-eval
+          const fn = eval(src);
+          return await (typeof fn === 'function' ? fn(input, { dryRun }) : fn);
+        },
+        { src: options.writeScript, input: options.input, dryRun: options.dryRun ?? false }
+      );
+
+      return {
+        success: true,
+        input: options.input,
+        dryRun: options.dryRun ?? false,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      try {
+        const { screenshotPath, domPath } = await captureForensics(page);
+        return {
+          success: false,
+          input: options.input,
+          dryRun: options.dryRun ?? false,
+          error: `Write failed: ${message}`,
+          forensicsPath: screenshotPath,
+        };
+      } catch {
+        // Forensic capture failed - return error without forensics
+        return {
+          success: false,
+          input: options.input,
+          dryRun: options.dryRun ?? false,
+          error: `Write failed: ${message}`,
+        };
+      }
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  } finally {
+    if (persistentContext) {
+      await context.unroute('**/*').catch(() => undefined);
+    } else {
+      await context.close();
+    }
+  }
+}
+
 export interface ExecuteActionSequenceOptions {
   sequence: ActionSequence;
   proxyUrl?: string;
