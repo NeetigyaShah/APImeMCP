@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ValidationResult } from './schema.js';
 import type { DriftEntry, DriftReport } from './drift.js';
+import type { ProvenanceReceipt } from './provenance.js';
 import { TransformSpecSchema } from './transform.js';
 import type { TransformSpec } from './transform.js';
 
@@ -221,6 +222,7 @@ export interface ExtractionResult {
   meta: ExtractionMeta;
   schemaValidation?: ValidationResult;
   drift?: DriftReport;
+  provenance?: ProvenanceReceipt;
 }
 
 export const RunKindSchema = z.enum(['extraction', 'action-sequence', 'static-http']);

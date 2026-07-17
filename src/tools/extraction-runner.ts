@@ -6,6 +6,7 @@ import { applyTransform } from '../transform.js';
 import { withResultCache } from '../result-cache.js';
 import { compareSnapshot, saveSnapshot } from '../snapshot.js';
 import type { SnapshotComparison, SnapshotMode, GoldenSnapshot } from '../snapshot.js';
+import type { ProvenanceReceipt } from '../provenance.js';
 
 export type SnapshotExtractionResult = ExtractionResult & {
   snapshotRecorded?: GoldenSnapshot;
@@ -21,6 +22,7 @@ export interface ExtractionRunnerDeps {
   executeExtraction: (options: ExecuteExtractionOptions) => Promise<unknown>;
   executeActionSequence: (options: ExecuteActionSequenceOptions) => Promise<void>;
   createSuccessfulResult: (data: unknown, meta: ExtractionResult['meta'], outputSchema?: Record<string, unknown>, drift?: DriftReport) => ExtractionResult;
+  buildReceipt: (input: { templateId: string; templateSource: string; targetUrl: string; data: unknown; outputSchema?: Record<string, unknown> }) => Promise<ProvenanceReceipt>;
   registryCdnAllowlist: string[];
   getAppConnection: (connectionId: string) => Promise<{ domainPattern: string; status: string } | undefined>;
   saveCookies: (templateId: string, cookieString: string) => Promise<void>;
@@ -119,6 +121,7 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
         await deps.executeMeasured(measure, () => deps.executeActionSequence({ sequence, proxyUrl, simulateLowBandwidth, headful, connectionId, networkAllowlist: entry.source === 'registry' ? entry.allowedDomains ?? [] : undefined, onNetworkRequest }));
         await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
         const result = deps.createSuccessfulResult({ completedSteps: sequence.steps.length }, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema);
+        result.provenance = await deps.buildReceipt({ templateId: entry.templateId, templateSource: raw, targetUrl: resolvedUrl, data: result.data, outputSchema: entry.outputSchema });
         return applySnapshot(result, entry.templateId, resolvedUrl, entry.outputSchema, snapshotMode);
       }
 
@@ -127,9 +130,10 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
       const run = async () => {
         measurementStarted = true;
         let drift: DriftReport | undefined;
+        const templateSource = await deps.readFile(deps.resolvePath(process.cwd(), entry.scriptPath), 'utf8');
         const data = await deps.executeMeasured(measure, () => deps.executeExtraction({
           targetUrl: resolvedUrl,
-          scriptPath: entry.scriptPath,
+          executableScript: templateSource,
           proxyUrl,
           cookieString: effectiveCookies,
           connectionId,
@@ -146,6 +150,7 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
         await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
         const transformedData = entry.transform ? applyTransform(data, entry.transform) : data;
         const result = deps.createSuccessfulResult(transformedData, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema, drift);
+        result.provenance = await deps.buildReceipt({ templateId: entry.templateId, templateSource, targetUrl: resolvedUrl, data: result.data, outputSchema: entry.outputSchema });
         return applySnapshot(result, entry.templateId, resolvedUrl, entry.outputSchema, snapshotMode);
       };
       if (connectionId || snapshotMode !== 'off') return run();

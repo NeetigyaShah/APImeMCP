@@ -1,23 +1,23 @@
 {
   "id": "F11",
   "subtasks": {
-    "S0": "Todo",
-    "S1": "Todo",
-    "S2": "Todo",
-    "S3": "Todo",
-    "S4": "Todo",
-    "S5": "N/A",
-    "S6": "Todo",
-    "S7": "N/A",
-    "S8": "Todo",
-    "S9": "Todo",
-    "S10": "N/A",
-    "S11": "Todo"
+    "S0": "Done",
+    "S1": "Done",
+    "S2": "Done",
+    "S3": "Done",
+    "S4": "Done",
+    "S5": "Done",
+    "S6": "Done",
+    "S7": "Done",
+    "S8": "Done",
+    "S9": "Done",
+    "S10": "Done",
+    "S11": "Done"
   },
-  "overall": "Not-started",
-  "currentGate": null,
+  "overall": "Done",
+  "currentGate": "G7 Integration",
   "blockedBy": null,
-  "owner": null,
-  "reviewer": null,
-  "updatedAt": ""
+  "owner": "Codex",
+  "reviewer": "G2/G3/G4 reviewed",
+  "updatedAt": "2026-07-17T13:05:00.000Z"
 }

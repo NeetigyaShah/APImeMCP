@@ -32,6 +32,7 @@ import { registerConnectAppTool, registerConfirmAppConnectionTool, registerListA
 import { registerSynthesizeSchemaTool } from './tools/synthesize-schema.js';
 import { registerPreviewTransformTool } from './tools/transform-tool.js';
 import { registerDiscoverTemplatesTool } from './discovery.js';
+import { buildReceipt, exportPublicKey, registerGetPublicKeyTool, registerVerifyReceiptTool, verifyReceipt } from './provenance.js';
 
 let updateStatus: UpdateStatus = { updateAvailable: false, latestCommit: null };
 
@@ -62,6 +63,7 @@ export const runExtraction = createExtractionRunner({
   executeExtraction,
   executeActionSequence,
   createSuccessfulResult: createSuccessfulExtractionResult,
+  buildReceipt,
   registryCdnAllowlist: REGISTRY_CDN_ALLOWLIST,
   getAppConnection,
   saveCookies,
@@ -123,6 +125,8 @@ registerAddCommunityTemplateTool(server, deps);
 registerSynthesizeSchemaTool(server, deps.engine);
 registerPreviewTransformTool(server, {});
 registerDiscoverTemplatesTool(server, deps.discovery);
+registerGetPublicKeyTool(server, { exportPublicKey });
+registerVerifyReceiptTool(server, { exportPublicKey, verifyReceipt });
 
 server.registerPrompt('get_environment_context', {
   title: 'Environment Context',
