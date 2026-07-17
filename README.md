@@ -73,6 +73,14 @@ cleared when the server restarts. Configure it with:
 - `APIMEMCP_CACHE_TTL_MS` — entry lifetime in milliseconds (default `60000`).
 - `APIMEMCP_CACHE_MAX_ENTRIES` — maximum entries retained (default `500`).
 
+### OpenTelemetry observability
+
+Export extraction metrics and traces to an OpenTelemetry-compatible endpoint (OTLP/gRPC or OTLP/HTTP):
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` — endpoint URL (e.g., `http://localhost:4317` for OTLP/gRPC or `http://localhost:4318` for OTLP/HTTP). When set, the adapter exports counter and histogram metrics plus synthetic spans for each extraction run. Omit to disable OTel export (default).
+- `OTEL_SERVICE_NAME` — service name in exported metrics (default `apimemcp`).
+- `OTEL_SDK_DISABLED` — set to `true` to disable OTel export even if endpoint is configured (default `false`).
+
 The server communicates over stdio — it's meant to be spawned by an MCP client, not
 run interactively.
 

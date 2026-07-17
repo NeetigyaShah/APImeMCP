@@ -137,6 +137,7 @@ reuse it. This read-only lookup never opens a browser or reads cookies.
   at `/docs/<id>`.
 - **Scheduling, metrics, notifications** — cron re-runs, run stats, webhook pings.
 - **Self-healing handoff** — drifted fixed-target templates can produce local forensics tickets; a calling agent supplies the fix, APImeMCP dry-runs/schema-validates it, and the registry client opens a PR branch. The server never calls an LLM for the fix and never auto-merges.
+- **OpenTelemetry observability** — export extraction metrics and traces (counter, histogram, synthetic spans) to an OTLP-compatible backend by setting `OTEL_EXPORTER_OTLP_ENDPOINT`. Integrates with standard observability stacks (Datadog, New Relic, Jaeger, Prometheus, etc.) without code changes.
 
 ## Connected app profiles
 

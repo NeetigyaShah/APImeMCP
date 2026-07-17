@@ -39,6 +39,7 @@ import { captureHealForensics, listPendingHeals, openHealRegistryPr, readHealTic
 import { registerListPendingHealsTool, registerRequestTemplateHealTool, registerSubmitTemplateHealTool } from './tools/heal-tools.js';
 import type { HealToolsDeps } from './tools/heal-tools.js';
 import { buildReceipt, exportPublicKey, registerGetPublicKeyTool, registerVerifyReceiptTool, verifyReceipt } from './provenance.js';
+import { initOtelAdapter } from './otel-adapter.js';
 
 let updateStatus: UpdateStatus = { updateAvailable: false, latestCommit: null };
 
@@ -215,6 +216,7 @@ async function main(): Promise<void> {
   await initBrowser();
   await startConfiguredAppConnections();
   await scheduler.loadPersisted();
+  initOtelAdapter();
   startDashboard({ runExtraction, scheduler, isBrowserReady, log, logError });
   void checkForUpdates().then((status) => {
     updateStatus = status;
