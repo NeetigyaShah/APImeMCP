@@ -49,6 +49,10 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
     _kind = 'extraction',
     onNetworkRequest?: (url: string) => void,
     snapshotMode: SnapshotMode = 'off',
+    // Change-monitoring ticks need a genuinely fresh read every time -- serving a cached
+    // result from a prior tick would mask real changes for up to the cache TTL, which
+    // defaults to the same 60s as the minimum monitor interval (see F20).
+    bypassCache = false,
   ): Promise<SnapshotExtractionResult> {
     const isDryRun = executableScript !== undefined;
     const startedAt = Date.now();
@@ -182,7 +186,7 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
         result.provenance = await deps.buildReceipt({ templateId: entry.templateId, templateSource, targetUrl: resolvedUrl, data: result.data, outputSchema: entry.outputSchema });
         return applySnapshot(result, entry.templateId, resolvedUrl, entry.outputSchema, snapshotMode);
       };
-      if (connectionId || snapshotMode !== 'off') return run();
+      if (connectionId || snapshotMode !== 'off' || bypassCache) return run();
       return await withResultCache(
         { templateId: entry.templateId, targetUrl: resolvedUrl, cookieString: effectiveCookies, proxyUrl },
         run,

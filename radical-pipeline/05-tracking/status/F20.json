@@ -9,15 +9,15 @@
     "S5": "Done",
     "S6": "Done",
     "S7": "Done",
-    "S8": "Todo",
-    "S9": "In-Review",
-    "S10": "Todo",
-    "S11": "Todo"
+    "S8": "Done",
+    "S9": "Done",
+    "S10": "Done",
+    "S11": "Done"
   },
-  "overall": "In-Prog",
-  "currentGate": "G2",
+  "overall": "Done",
+  "currentGate": "G7",
   "blockedBy": null,
   "owner": "builder-f20",
-  "reviewer": null,
-  "updatedAt": "2026-07-17T19:30:00.000Z"
+  "reviewer": "claude-f20-gate-reviewer; claude-main-session-value-diff-and-cache-fix",
+  "updatedAt": "2026-07-17T15:41:00.000Z"
 }

@@ -11,8 +11,9 @@ import { addFromRegistry, fetchRegistryManifest, openTemplatePr, submitTemplateP
 import { addCommunityTemplateCore } from './tools/add-community-template.js';
 import { batchDownload } from './downloader.js';
 import { getAllSla, preExecutionMeasure, recordMeasure } from './metrics.js';
-import { sendNotification } from './notifier.js';
+import { sendNotification, notifyChange } from './notifier.js';
 import { Scheduler } from './scheduler.js';
+import { diffContent } from './drift.js';
 import { reportProgress } from './progress.js';
 import { checkForUpdates } from './updater.js';
 import type { UpdateStatus } from './updater.js';
@@ -30,6 +31,7 @@ import { registerBatchDownloadAssetsTool } from './tools/batch-download-assets-t
 import { registerAddCommunityTemplateTool } from './tools/add-community-template-tool.js';
 import { registerConnectAppTool, registerConfirmAppConnectionTool, registerListAppConnectionsTool } from './tools/app-connections-tools.js';
 import { registerSynthesizeSchemaTool } from './tools/synthesize-schema.js';
+import { registerMonitorTool } from './tools/monitor-tool.js';
 import { registerPreviewTransformTool } from './tools/transform-tool.js';
 import { registerDiscoverTemplatesTool } from './discovery.js';
 import { findPipelineById, listPipelineDefs, registerPipeline, registerRegisterPipelineTool, registerRunPipelineTool, registerListPipelinesTool } from './pipeline.js';
@@ -87,6 +89,16 @@ const scheduler = new Scheduler(async (targetUrl, templateId) => {
   await runExtraction(targetUrl, templateId);
 });
 
+// Initialize monitor dependencies for scheduler
+scheduler.setMonitorDeps({
+  runExtraction: async (targetUrl, templateId) => {
+    return runExtraction(targetUrl, templateId, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'off', true);
+  },
+  diff: diffContent,
+  notify: notifyChange,
+  loadTemplate: findTemplateById,
+});
+
 const server = new McpServer({ name: 'APImeMCP', version: '1.5.0' });
 const deps: ToolDeps = {
   appConnections: { upsert: upsertAppConnection, list: listAppConnections },
@@ -95,7 +107,12 @@ const deps: ToolDeps = {
   templates: { register: registerTemplate, loadManifest, findByUrl: findTemplateByUrl },
   recordings: { save: saveRecording, load: loadRecording, list: listRecordings },
   cookies: { save: saveCookies },
-  scheduler,
+  scheduler: {
+    register: (targetUrl, cronExpression, templateId) => scheduler.register(targetUrl, cronExpression, templateId),
+    subscribeMonitor: (input) => scheduler.subscribeMonitor(input),
+    cancelMonitor: (id) => scheduler.cancelMonitor(id),
+    listMonitors: () => scheduler.listMonitors(),
+  },
   metrics: { getStats: getAllSla },
   notifications: { send: sendNotification },
   downloads: { batch: batchDownload },
@@ -193,6 +210,7 @@ registerVerifyReceiptTool(server, { exportPublicKey, verifyReceipt });
 registerSetVaultSecretTool(server, deps);
 registerListVaultSecretsTool(server, deps);
 registerDeleteVaultSecretTool(server, deps);
+registerMonitorTool(server, deps);
 
 server.registerPrompt('get_environment_context', {
   title: 'Environment Context',
