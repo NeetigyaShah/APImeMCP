@@ -149,3 +149,109 @@ describe('pipeline runner', () => {
     expect(calls).toEqual(['register', 'measure']);
   });
 });
+
+// F09: Bidirectional flows - write step tests
+describe('F09 - Write steps in pipelines', () => {
+  it('dispatches write steps and applies transforms', async () => {
+    const writeStepPipeline: PipelineDef = {
+      id: 'bidirectional-flow',
+      name: 'Read and write',
+      steps: [
+        { kind: 'read' as const, id: 'stepA', templateId: 'extract-data' },
+        {
+          kind: 'write' as const,
+          id: 'stepB',
+          fromStepId: 'stepA',
+          targetTemplateId: 'submit-form',
+          transform: { version: 1, ops: [{ op: 'pick' as const, fields: ['name', 'email'] }] },
+        },
+      ],
+    };
+
+    await registerPipeline(writeStepPipeline);
+
+    const writeFlowCalls: any[] = [];
+    const mockManifest = {
+      'submit-form': {
+        templateId: 'submit-form',
+        domainPattern: 'example.com',
+        scriptPath: 'test.js',
+        templateKind: 'write' as const,
+        writeScript: 'async (input) => ({ submitted: true })',
+        createdAt: '2026-07-17T00:00:00Z',
+        updatedAt: '2026-07-17T00:00:00Z',
+      },
+    };
+
+    const result = await runPipeline('bidirectional-flow', {}, {
+      runExtraction: async (_targetUrl, templateId) => ({
+        success: true,
+        data: templateId === 'extract-data' ? { name: 'John', email: 'john@example.com', _extra: 'dropped' } : undefined,
+      }),
+      registerPipeline,
+      findPipelineById,
+      listPipelineDefs,
+      executeWriteFlow: async (opts) => {
+        writeFlowCalls.push(opts);
+        return { success: true, input: opts.input, dryRun: opts.dryRun ?? false };
+      },
+      loadManifest: async () => mockManifest as any,
+      findTemplateById: (manifest: any, id: string) => manifest[id],
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.steps).toHaveLength(2);
+    expect(writeFlowCalls).toHaveLength(1);
+    // Transform should have picked only name and email
+    expect(writeFlowCalls[0].input).toEqual({ name: 'John', email: 'john@example.com' });
+  });
+
+  it('handles dry-run mode for write steps', async () => {
+    const dryRunPipeline: PipelineDef = {
+      id: 'dryrun-flow',
+      name: 'Dry run test',
+      steps: [
+        { kind: 'read' as const, id: 'stepA', templateId: 'extract' },
+        {
+          kind: 'write' as const,
+          id: 'stepB',
+          fromStepId: 'stepA',
+          targetTemplateId: 'submit',
+          transform: { version: 1, ops: [] },
+          dryRun: true,
+        },
+      ],
+    };
+
+    await registerPipeline(dryRunPipeline);
+
+    const writeFlowCalls: any[] = [];
+    const mockManifest = {
+      submit: {
+        templateId: 'submit',
+        domainPattern: 'example.com',
+        scriptPath: 'test.js',
+        templateKind: 'write' as const,
+        writeScript: 'async (input) => ({})',
+        createdAt: '2026-07-17T00:00:00Z',
+        updatedAt: '2026-07-17T00:00:00Z',
+      },
+    };
+
+    const result = await runPipeline('dryrun-flow', {}, {
+      runExtraction: async (url, templateId) => ({ success: true, data: templateId === 'extract' ? { value: 123 } : undefined }),
+      registerPipeline,
+      findPipelineById,
+      listPipelineDefs,
+      executeWriteFlow: async (opts) => {
+        writeFlowCalls.push(opts);
+        return { success: true, input: opts.input, dryRun: opts.dryRun ?? false };
+      },
+      loadManifest: async () => mockManifest as any,
+      findTemplateById: (manifest: any, id: string) => manifest[id],
+    });
+
+    expect(result.success).toBe(true);
+    expect(writeFlowCalls[0].dryRun).toBe(true);
+  });
+});

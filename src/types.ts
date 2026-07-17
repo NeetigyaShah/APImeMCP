@@ -85,6 +85,12 @@ export const RegisterExtractionTemplateShape = {
   kind: TemplateKindSchema.optional(),
   // Optional request headers for static-http kind (User-Agent overrides, etc.)
   requestHeaders: z.record(z.string()).optional(),
+  // F09: template kind discriminant ('read' is default for back-compat)
+  templateKind: z.enum(['read', 'write']).default('read').optional(),
+  // F09: write template only - Playwright script that fills + submits a form from input data
+  writeScript: z.string().min(1, 'writeScript must not be empty').max(100_000, 'writeScript exceeds the 100KB limit').optional(),
+  // F09: write template optional pre-submit schema check
+  writeInputSchema: z.record(z.unknown()).optional(),
 };
 
 export const RegisterExtractionTemplateInputSchema = z
@@ -285,6 +291,12 @@ export interface ManifestEntry {
   secretInputs?: Record<string, string>;
   // Optional request headers for static-http kind (User-Agent overrides, etc.)
   requestHeaders?: Record<string, string>;
+  // F09: template kind discriminant ('read' is default for back-compat)
+  templateKind?: 'read' | 'write';
+  // F09: write template only - Playwright script that fills + submits a form from input data
+  writeScript?: string;
+  // F09: write template optional pre-submit schema check
+  writeInputSchema?: Record<string, unknown>;
   // System-assigned, NOT part of the public register_extraction_template tool's input
   // schema (a caller can't just claim 'local' to escape the sandbox) - set only by
   // registry-client.ts's addFromRegistry(). 'registry' templates get a network
@@ -358,7 +370,22 @@ export interface HealResult {
 export const RunKindSchema = z.enum(['extraction', 'action-sequence', 'static-http', 'pipeline']);
 export type RunKind = z.infer<typeof RunKindSchema>;
 
-export const PipelineStepSchema = z.object({
+// F09: Write step for bidirectional flows (declared first, before use in union)
+export const WriteStepSchema = z.object({
+  kind: z.literal('write'),
+  id: z.string().min(1),
+  fromStepId: z.string().min(1),
+  targetTemplateId: TemplateIdSchema,
+  transform: TransformSpecSchema,
+  perItem: z.boolean().optional(),
+  onError: z.enum(['stop', 'continue', 'collect']).optional(),
+  dryRun: z.boolean().optional(),
+});
+export type WriteStep = z.infer<typeof WriteStepSchema>;
+
+// F07: Basic extraction/read step
+const ReadPipelineStepSchema = z.object({
+  kind: z.literal('read').optional(), // default 'read' for back-compat
   id: z.string().min(1),
   templateId: TemplateIdSchema,
   targetUrl: z.string().url().optional(),
@@ -366,7 +393,11 @@ export const PipelineStepSchema = z.object({
   proxyUrl: z.string().url().optional(),
   inputMapping: z.record(z.string()).optional(),
 });
-export type PipelineStep = z.infer<typeof PipelineStepSchema>;
+export type ReadPipelineStep = z.infer<typeof ReadPipelineStepSchema>;
+
+// Union of all step kinds (F07 read + F09 write)
+export const PipelineStepSchema = z.union([ReadPipelineStepSchema, WriteStepSchema]);
+export type PipelineStep = ReadPipelineStep | WriteStep;
 
 export const PipelineDefSchema = z.object({
   id: TemplateIdSchema,
@@ -392,6 +423,17 @@ export interface PipelineRunResult {
   steps: PipelineStepResult[];
   failedStep?: string;
   totalDurationMs: number;
+}
+
+export interface WriteResult {
+  templateId: string;
+  input: unknown;
+  success: boolean;
+  dryRun: boolean;
+  submittedAt: string;
+  durationMs: number;
+  error?: string;
+  forensicsPath?: string;
 }
 
 export const MeasureRecordSchema = z

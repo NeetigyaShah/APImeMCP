@@ -5,8 +5,12 @@ import { z } from 'zod';
 import { withLock } from './lock.js';
 import { atomicWriteFile } from './storage.js';
 import { PipelineDefSchema } from './types.js';
-import type { MeasureRecord, PipelineDef, PipelineRunResult, PipelineStepResult } from './types.js';
+import type { MeasureRecord, PipelineDef, PipelineRunResult, PipelineStepResult, WriteResult } from './types.js';
 import type { ExtractionRunner } from './tools/tool-deps.js';
+import { applyTransform } from './transform.js';
+import type { ExecuteWriteFlowOptions } from './engine.js';
+import { findTemplateById, loadManifest } from './storage.js';
+import { validateOutput } from './schema.js';
 
 const pipelineIdPattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -100,6 +104,9 @@ export interface PipelineDeps {
   findPipelineById: typeof findPipelineById;
   listPipelineDefs: typeof listPipelineDefs;
   recordMeasure?: (measure: MeasureRecord) => void | Promise<void>;
+  executeWriteFlow?: (opts: ExecuteWriteFlowOptions) => Promise<{ success: boolean; input: unknown; dryRun: boolean; error?: string; forensicsPath?: string }>;
+  loadManifest?: typeof loadManifest;
+  findTemplateById?: typeof findTemplateById;
 }
 
 export async function runPipeline(
@@ -113,37 +120,142 @@ export async function runPipeline(
   const results: PipelineStepResult[] = [];
   const stepResults: Record<string, { output?: unknown }> = {};
   let failedStep: string | undefined;
+
   for (const step of definition.steps) {
     const stepStartedAt = Date.now();
     try {
-      const resolved = resolveInputMapping(step.inputMapping, initialInput, stepResults);
-      const result = await deps.runExtraction(
-        (resolved.targetUrl ?? step.targetUrl) as string | undefined,
-        step.templateId,
-        (resolved.proxyUrl ?? step.proxyUrl) as string | undefined,
-        (resolved.cookieString ?? step.cookieString) as string | undefined,
-      );
-      const stepResult: PipelineStepResult = {
-        stepId: step.id,
-        templateId: step.templateId,
-        success: result.success,
-        ...(result.data !== undefined ? { output: result.data } : {}),
-        ...(result.error ? { error: result.error } : {}),
-        durationMs: Date.now() - stepStartedAt,
-      };
-      results.push(stepResult);
-      if (!result.success) {
-        failedStep = step.id;
-        break;
+      // F07: Read steps (default kind)
+      if (step.kind !== 'write') {
+        const resolved = resolveInputMapping(step.inputMapping, initialInput, stepResults);
+        const result = await deps.runExtraction(
+          (resolved.targetUrl ?? (step as any).targetUrl) as string | undefined,
+          (step as any).templateId,
+          (resolved.proxyUrl ?? (step as any).proxyUrl) as string | undefined,
+          (resolved.cookieString ?? (step as any).cookieString) as string | undefined,
+        );
+        const stepResult: PipelineStepResult = {
+          stepId: step.id,
+          templateId: (step as any).templateId,
+          success: result.success,
+          ...(result.data !== undefined ? { output: result.data } : {}),
+          ...(result.error ? { error: result.error } : {}),
+          durationMs: Date.now() - stepStartedAt,
+        };
+        results.push(stepResult);
+        if (!result.success) {
+          failedStep = step.id;
+          break;
+        }
+        stepResults[step.id] = { output: result.data };
+      } else {
+        // F09: Write steps
+        if (!deps.executeWriteFlow) {
+          throw new Error('Write steps require executeWriteFlow in deps');
+        }
+
+        const writeStep = step;
+        const upstreamOutput = stepResults[writeStep.fromStepId]?.output;
+        if (!upstreamOutput) {
+          throw new Error(`Write step references unknown or unavailable step "${writeStep.fromStepId}"`);
+        }
+
+        // Load the write template (use injected or direct import)
+        const loadManifestFn = deps.loadManifest || loadManifest;
+        const findTemplateByIdFn = deps.findTemplateById || findTemplateById;
+        const manifest = await loadManifestFn();
+        const writeTemplate = findTemplateByIdFn(manifest, writeStep.targetTemplateId);
+        if (!writeTemplate) {
+          throw new Error(`Write template "${writeStep.targetTemplateId}" not found`);
+        }
+        if (writeTemplate.templateKind !== 'write' || !writeTemplate.writeScript) {
+          throw new Error(`Template "${writeStep.targetTemplateId}" is not a write template`);
+        }
+
+        // Determine if we need to fan out over items
+        const perItem = writeStep.perItem ?? Array.isArray(upstreamOutput);
+        const items = perItem && Array.isArray(upstreamOutput) ? upstreamOutput : [upstreamOutput];
+        const onError = writeStep.onError ?? 'collect';
+        const writeResults: WriteResult[] = [];
+        let hadError = false;
+
+        for (const item of items) {
+          try {
+            // Apply transform to the item
+            const transformedInput = applyTransform(item, writeStep.transform);
+
+            // Execute the write flow
+            const writeResult = await deps.executeWriteFlow({
+              targetUrl: writeTemplate.fixedTargetUrl || '',
+              templateId: writeStep.targetTemplateId,
+              writeScript: writeTemplate.writeScript,
+              input: transformedInput,
+              writeInputSchema: writeTemplate.writeInputSchema,
+              dryRun: writeStep.dryRun,
+              waitStrategy: writeTemplate.waitStrategy,
+              readySelector: writeTemplate.readySelector,
+            });
+
+            writeResults.push({
+              templateId: writeStep.targetTemplateId,
+              input: transformedInput,
+              success: writeResult.success,
+              dryRun: writeResult.dryRun,
+              submittedAt: new Date().toISOString(),
+              durationMs: 0, // TODO: track individual write durations
+              error: writeResult.error,
+              forensicsPath: writeResult.forensicsPath,
+            });
+
+            if (!writeResult.success) {
+              hadError = true;
+              if (onError === 'stop') {
+                throw new Error(writeResult.error || 'Write failed');
+              }
+            }
+          } catch (error) {
+            hadError = true;
+            const message = error instanceof Error ? error.message : String(error);
+            writeResults.push({
+              templateId: writeStep.targetTemplateId,
+              input: item,
+              success: false,
+              dryRun: writeStep.dryRun ?? false,
+              submittedAt: new Date().toISOString(),
+              durationMs: 0,
+              error: message,
+            });
+            if (onError === 'stop') {
+              throw error;
+            }
+          }
+        }
+
+        const success = !hadError || onError === 'continue';
+        const stepResult: PipelineStepResult = {
+          stepId: step.id,
+          templateId: writeStep.targetTemplateId,
+          success,
+          output: { results: writeResults, succeeded: writeResults.filter(r => r.success).length, failed: writeResults.filter(r => !r.success).length },
+          ...(hadError && onError === 'collect' ? { error: `${writeResults.filter(r => !r.success).length} write(s) failed` } : {}),
+          durationMs: Date.now() - stepStartedAt,
+        };
+        results.push(stepResult);
+
+        if (hadError && onError === 'collect') {
+          failedStep = step.id;
+          break;
+        }
+
+        stepResults[step.id] = { output: writeResults };
       }
-      stepResults[step.id] = { output: result.data };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      results.push({ stepId: step.id, templateId: step.templateId, success: false, error: message, durationMs: Date.now() - stepStartedAt });
+      results.push({ stepId: step.id, templateId: (step as any).templateId || (step as any).targetTemplateId, success: false, error: message, durationMs: Date.now() - stepStartedAt });
       failedStep = step.id;
       break;
     }
   }
+
   const success = failedStep === undefined;
   const totalDurationMs = Date.now() - startedAt;
   await deps.recordMeasure?.({

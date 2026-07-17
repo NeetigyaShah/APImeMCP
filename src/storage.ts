@@ -87,6 +87,9 @@ export async function registerTemplate(
       ...(input.secretInputs ? { secretInputs: input.secretInputs } : {}),
       ...(input.kind ? { kind: input.kind } : {}),
       ...(input.requestHeaders ? { requestHeaders: input.requestHeaders } : {}),
+      ...(input.templateKind ? { templateKind: input.templateKind } : {}),
+      ...(input.writeScript ? { writeScript: input.writeScript } : {}),
+      ...(input.writeInputSchema ? { writeInputSchema: input.writeInputSchema } : {}),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };

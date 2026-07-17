@@ -84,3 +84,4 @@ describe('crystallizeRecording', () => {
 
 // executeStaticHttpExtraction integration tests are in scripts/verify-F15.mjs
 // Unit tests for executeStaticHttpExtraction require fs mocking which is tested in verify-F15
+// executeWriteFlow is tested end-to-end with a real browser in scripts/verify-F09.mjs
