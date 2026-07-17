@@ -4,7 +4,8 @@ import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { ActionSequence, ActionStep, WaitStrategy } from './types.js';
+import type { ActionSequence, ActionStep, ExtractionMeta, ExtractionResult, WaitStrategy } from './types.js';
+import { validateOutput } from './schema.js';
 import {
   confirmAppConnection,
   getAppConnection,
@@ -24,6 +25,20 @@ const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const VIEWPORT = { width: 1280, height: 800 };
 const NAVIGATION_TIMEOUT_MS = 30_000;
+
+export function createSuccessfulExtractionResult(
+  data: unknown,
+  meta: ExtractionMeta,
+  outputSchema?: Record<string, unknown>,
+): ExtractionResult {
+  const schemaValidation = outputSchema ? validateOutput(data, outputSchema) : undefined;
+  return {
+    success: true,
+    data,
+    meta,
+    ...(schemaValidation ? { schemaValidation } : {}),
+  };
+}
 
 let browserInstance: Browser | undefined;
 const appContexts = new Map<string, BrowserContext>();
