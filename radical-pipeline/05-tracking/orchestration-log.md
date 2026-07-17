@@ -49,6 +49,7 @@
 - Wave 2 launch attempt `019f6f7c-*` failed before execution for all four builders because the selected `gpt-5.6-terra` model was at capacity. No worktree changes occurred; retry is being made with a different model.
 - F16's first live verification timed out; its first security repair then left keyed lock queues allocated indefinitely. The second repair passed final review. Its initial integration agent merged source but stalled before tracker finalization and cleanup; a fresh integration agent owns that completion.
 - The fresh F16 finalizer also stalled without progressing verification or tracker cleanup. Source had already been merged, so the orchestrator completed only the remaining non-source gate and tracker finalization locally.
+- F23's integration agent did not emit interim notifications after rebasing, but shutdown revealed it completed the full handoff: 89 tests, F23/F16/F02 verifiers, tracker commit `147a0b5`, and worktree removal.
 
 ## Agent Failures
 
