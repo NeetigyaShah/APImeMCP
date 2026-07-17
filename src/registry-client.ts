@@ -5,6 +5,11 @@ import { registerTemplate, registerActionSequenceTemplate } from './storage.js';
 // server to run, no publish step beyond merging a PR. See apimemcp-templates' own
 // README for why this is a git repo, not a hosted database.
 const REGISTRY_BASE = process.env.APIMEMCP_REGISTRY_BASE ?? 'https://cdn.jsdelivr.net/gh/NeetigyaShah/APImeMCP-Templates@main/registry';
+const GITHUB_API_BASE = process.env.APIMEMCP_GITHUB_API_BASE ?? 'https://api.github.com';
+const REGISTRY_OWNER = process.env.APIMEMCP_REGISTRY_OWNER ?? 'NeetigyaShah';
+const REGISTRY_REPO = process.env.APIMEMCP_REGISTRY_REPO ?? 'APImeMCP-Templates';
+const REGISTRY_BRANCH = process.env.APIMEMCP_REGISTRY_BRANCH ?? 'main';
+const GITHUB_API_VERSION = '2026-03-10';
 
 export async function fetchRegistryManifest(): Promise<Manifest> {
   const res = await fetch(`${REGISTRY_BASE}/manifest.json`);
@@ -112,4 +117,108 @@ export async function addFromRegistry(domain: string): Promise<AddFromRegistryRe
   }
 
   return registerRegistryEntry(entry);
+}
+
+export interface SubmitPrOptions {
+  githubToken: string;
+  branch?: string;
+}
+
+interface GitHubRefResponse {
+  object: { sha: string };
+}
+
+interface GitHubContentResponse {
+  content: string;
+  sha: string;
+}
+
+interface GitHubPullResponse {
+  html_url?: string;
+  url?: string;
+}
+
+async function githubRequest<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${GITHUB_API_BASE}${path}`, {
+    ...init,
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'X-GitHub-Api-Version': GITHUB_API_VERSION,
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init.headers,
+    },
+  });
+  if (!response.ok) {
+    const details = await response.text().catch(() => '');
+    throw new Error(`GitHub request failed: ${response.status} ${response.statusText}${details ? ` ${details}` : ''}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+function encodeBase64(value: string): string {
+  return Buffer.from(value, 'utf8').toString('base64');
+}
+
+function decodeBase64(value: string): string {
+  return Buffer.from(value.replace(/\s/g, ''), 'base64').toString('utf8');
+}
+
+function buildTemplatePrBody(entry: ManifestEntry): string {
+  return [
+    'auto-generated via computer-use crystallization — review required',
+    '',
+    'This PR was opened by APImeMCP after a successful local crystallization dry-run.',
+    '',
+    'Manifest entry:',
+    '',
+    '```json',
+    JSON.stringify(entry, null, 2),
+    '```',
+  ].join('\n');
+}
+
+export async function submitTemplatePR(entry: ManifestEntry, opts: SubmitPrOptions): Promise<{ prUrl: string }> {
+  const token = opts.githubToken.trim();
+  if (!token) throw new Error('githubToken is required to submit a template PR');
+
+  const branch = opts.branch ?? `crystallize/${entry.templateId}-${Date.now()}`;
+  const baseRef = await githubRequest<GitHubRefResponse>(`/repos/${REGISTRY_OWNER}/${REGISTRY_REPO}/git/ref/heads/${REGISTRY_BRANCH}`, token);
+
+  await githubRequest(`/repos/${REGISTRY_OWNER}/${REGISTRY_REPO}/git/refs`, token, {
+    method: 'POST',
+    body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseRef.object.sha }),
+  });
+
+  const manifestPath = 'registry/manifest.json';
+  const manifestFile = await githubRequest<GitHubContentResponse>(
+    `/repos/${REGISTRY_OWNER}/${REGISTRY_REPO}/contents/${manifestPath}?ref=${encodeURIComponent(REGISTRY_BRANCH)}`,
+    token
+  );
+  const manifest = JSON.parse(decodeBase64(manifestFile.content)) as Manifest;
+  manifest[entry.templateId] = entry;
+
+  await githubRequest(`/repos/${REGISTRY_OWNER}/${REGISTRY_REPO}/contents/${manifestPath}`, token, {
+    method: 'PUT',
+    body: JSON.stringify({
+      message: `Add crystallized template ${entry.templateId}`,
+      content: encodeBase64(`${JSON.stringify(manifest, null, 2)}\n`),
+      branch,
+      sha: manifestFile.sha,
+    }),
+  });
+
+  const pull = await githubRequest<GitHubPullResponse>(`/repos/${REGISTRY_OWNER}/${REGISTRY_REPO}/pulls`, token, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: `Add crystallized template ${entry.templateId}`,
+      head: branch,
+      base: REGISTRY_BRANCH,
+      body: buildTemplatePrBody(entry),
+      maintainer_can_modify: true,
+      draft: false,
+    }),
+  });
+
+  return { prUrl: pull.html_url ?? pull.url ?? '' };
 }

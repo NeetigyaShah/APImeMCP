@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { ActionSequence, Manifest, ManifestEntry, RegisterExtractionTemplateInput } from './types.js';
+import type { ActionSequence, Manifest, ManifestEntry, Recording, RegisterExtractionTemplateInput } from './types.js';
 import { withLock } from './lock.js';
 import { writeUsageReadme } from './usage.js';
 
@@ -11,6 +11,17 @@ function getTemplatesDir(): string {
 
 function getManifestPath(): string {
   return path.join(getTemplatesDir(), 'manifest.json');
+}
+
+function getRecordingsDir(): string {
+  return path.join(getTemplatesDir(), 'recordings');
+}
+
+function getRecordingPath(id: string): string {
+  if (!/^[a-zA-Z0-9._-]+$/.test(id)) {
+    throw new Error('recording id must contain only letters, numbers, dot, underscore, or dash');
+  }
+  return path.join(getRecordingsDir(), `${id}.json`);
 }
 
 export async function ensureStorageInitialized(): Promise<void> {
@@ -128,6 +139,35 @@ export async function updateVerificationStatus(
     if (!entry) return;
     entry.lastVerified = { ...result, timestamp: new Date().toISOString() };
     await saveManifest(manifest);
+  });
+}
+
+export async function saveRecording(recording: Recording): Promise<void> {
+  await withLock('recordings', async () => {
+    await atomicWriteFile(getRecordingPath(recording.id), JSON.stringify(recording, null, 2));
+  });
+}
+
+export async function loadRecording(id: string): Promise<Recording | null> {
+  try {
+    const raw = await fs.readFile(getRecordingPath(id), 'utf8');
+    return JSON.parse(raw) as Recording;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+export async function listRecordings(): Promise<Recording[]> {
+  return withLock('recordings', async () => {
+    await fs.mkdir(getRecordingsDir(), { recursive: true });
+    const files = await fs.readdir(getRecordingsDir());
+    const recordings = await Promise.all(
+      files
+        .filter((file) => file.endsWith('.json'))
+        .map(async (file) => JSON.parse(await fs.readFile(path.join(getRecordingsDir(), file), 'utf8')) as Recording)
+    );
+    return recordings.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   });
 }
 

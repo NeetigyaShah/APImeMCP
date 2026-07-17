@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { loadManifest, registerActionSequenceTemplate, updateVerificationStatus } from './storage.js';
 import { RegisterExtractionTemplateShape, ScheduleStockCheckShape, isHttpUrl } from './types.js';
-import type { Manifest, ExtractionResult, ActionStep } from './types.js';
+import type { Manifest, ExtractionResult, ReplayActionStep } from './types.js';
 import { getAllSla } from './metrics.js';
 import { buildUsageMarkdown, renderDocsPage, getUsagePath } from './usage.js';
 import { templatesWithSavedCookies, saveCookies } from './cookie-store.js';
@@ -734,7 +734,7 @@ export function startDashboard(deps: DashboardDeps): void {
       const body = req.body ?? {};
       const name = typeof body.name === 'string' ? body.name.trim() : '';
       const startUrl = typeof body.startUrl === 'string' ? body.startUrl : '';
-      const steps = body.steps as ActionStep[];
+      const steps = body.steps as ReplayActionStep[];
 
       res.set('Access-Control-Allow-Origin', '*');
 

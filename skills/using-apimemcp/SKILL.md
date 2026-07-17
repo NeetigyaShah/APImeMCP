@@ -64,7 +64,7 @@ apply the same judgment here you'd apply to writing that code by hand.
 |---|---|---|
 | `register_extraction_template` | `templateId` (kebab-case), `domainPattern`, `executableScript`, `fixedTargetUrl?`, `waitStrategy?`, `readySelector?`, `outputSchema?` | Upserts by `templateId`. `outputSchema` is a JSON Schema contract for result `data`; omitted templates retain pre-contract behavior. Multiple templates can share a `domainPattern` (N:1) — always pass explicit `templateId` when more than one template targets the same domain, auto-match-by-URL is only reliable for a domain's single most-recently-registered template. Set `fixedTargetUrl` when the page never varies (see below). Default wait is the fast `domcontentloaded` — if a page populates its data asynchronously (a grid that loads after initial paint), set `waitStrategy: 'networkidle'` or, better, `readySelector` naming the element that signals "data's here." |
 | `execute_native_extraction` | `targetUrl?`, `templateId?`, `proxyUrl?`, `cookieString?`, `connectionId?`, `executableScript?`, `outputSchema?`, `snapshot?` | Runs an extraction OR an action-sequence template. A non-empty `executableScript` makes a dry-run that bypasses template lookup and all storage persistence; templates with `outputSchema` return `schemaValidation: { valid, errors? }`, otherwise it is absent. Set `snapshot: "record"` to save a local golden result or `snapshot: "check"` to receive `match`, `regression` with path-level diffs, or `no-baseline`; omitted/default `snapshot: "off"` preserves normal behavior. Prefer a connected `connectionId` for login state; it uses a persistent browser profile and cannot be combined with manual cookie input. Logs a metric on success. |
-| `synthesize_schema` | `targetUrl`, `cookieString?`, `proxyUrl?` | Renders an unmapped page and returns raw HTML plus a screenshot path. Write a script from those forensics, dry-run it with `execute_native_extraction({ targetUrl, executableScript })`, then register it normally. |
+| `synthesize_schema` | `targetUrl`, `cookieString?`, `proxyUrl?`, `script?`, `recording?`, `templateId?`, `domainPattern?`, `outputSchema?`, `register?`, `autoPr?`, `githubToken?` | Renders an unmapped page when called with only `targetUrl`. When given a verified `script` or a computer-use `recording`, dry-runs it, registers the template by default, and can open a review-required registry PR with `autoPr:true`; it never auto-merges. |
 | `connect_app` | `connectionId`, `domainPattern`, `loginUrl`, `autoStart?` | Opens a visible persistent Chromium profile for user-driven login. Use one profile per site; call `confirm_app_connection` after login. The tool uses injected dependencies and stores browser-profile metadata only, never secret values. |
 | `confirm_app_connection` | `connectionId` | Marks the user-managed browser profile ready for extraction. |
 | `list_app_connections` | none | Lists profile IDs, domain scopes, startup behavior, and confirmation status without returning cookie values. |
@@ -80,6 +80,19 @@ apply the same judgment here you'd apply to writing that code by hand.
 Action-sequence templates are **created by the recorder extension** (it POSTs recorded
 steps + cookies to `/api/recordings`), not by a tool — there's no "register workflow"
 tool. You run them via `execute_native_extraction`.
+
+## Computer-use crystallization
+
+If an agent already solved an unmapped page through a slow computer-use loop, pass the
+successful `recording` to `synthesize_schema` instead of throwing it away. The recording
+uses ordered `goto`, `fill`, `click`, `waitFor`, and `extract` steps. APImeMCP turns it
+into a deterministic extraction template, dry-runs it, persists the recording under
+`templates/recordings/`, and registers the template so later calls use
+`execute_native_extraction` directly with no vision loop. Keep `autoPr` omitted/`false`
+unless a human wants a registry contribution; with `autoPr:true`, pass a GitHub token
+and review the PR because it is opened for review only, never merged automatically.
+Do not put passwords, cookies, API keys, or session tokens into `fill.value`; use
+`connect_app` for authenticated browser state.
 
 Resource `status://server` and dashboard `http://127.0.0.1:3000` (if running) expose
 the same data for inspection — check `status://server` before assuming the browser
