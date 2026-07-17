@@ -10,14 +10,14 @@
     "S6": "Done",
     "S7": "Done",
     "S8": "Done",
-    "S9": "In-Review",
+    "S9": "Blocked",
     "S10": "Done",
     "S11": "Todo"
   },
-  "overall": "In-Progress",
+  "overall": "Blocked",
   "currentGate": "G2",
-  "blockedBy": null,
+  "blockedBy": "F06 gate review FAIL: G3 ADR-01 recording.outputSchema is dropped on registration; G4/G2 registry PR path opens manifest-only PR without generated script, so contribution is unusable and generated script/PR diff cannot be secret-scanned.",
   "owner": "codex-f06-builder",
-  "reviewer": null,
-  "updatedAt": "2026-07-17T12:24:20.163Z"
+  "reviewer": "codex-f06-reviewer",
+  "updatedAt": "2026-07-17T12:51:31.146Z"
 }
