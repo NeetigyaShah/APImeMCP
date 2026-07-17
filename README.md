@@ -348,6 +348,8 @@ Run a registered template against a URL.
 | `templateId` | string, optional | explicit template; if omitted, resolved from `targetUrl`'s domain (in which case `targetUrl` is required) |
 | `connectionId` | string, optional | connected persistent browser profile created by `connect_app`; must match the target domain; cannot be combined with manual cookie input |
 | `proxyUrl` | string, optional | e.g. `http://user:pass@host:port`, passed through to Playwright's `context.newContext({ proxy })` for routing through an authorized egress proxy or testing region-specific rendering. No automated rotation. |
+| `executableScript` | string, optional | inline script for a non-persistent dry-run. When present, it bypasses template lookup and returns `dryRun: true`. |
+| `outputSchema` | JSON Schema object, optional | draft schema validated when the optional schema validator is available; otherwise omitted without failing the dry-run. |
 
 Returns `{ success, data?, error?, meta: { url, templateId, domainMatched, durationMs, timestamp } }`.
 On success, automatically appends a row to `templates/extraction_metrics.csv`
@@ -358,6 +360,20 @@ extension's `/api/recordings` endpoint, not `register_extraction_template`), thi
 replays the recorded click/fill/select/navigate steps headlessly instead of running a
 `page.evaluate()` script — `data` is just `{ completedSteps }` rather than scraped
 content. See "Recorder extension" above.
+
+### `synthesize_schema`
+
+Render an unmapped page for agent-authored extraction work. It returns the page HTML,
+a forensic screenshot path, resolved URL, and a next-step hint. Write an extraction
+script from the returned HTML, dry-run it with `execute_native_extraction` using
+`targetUrl` and `executableScript`, then persist the verified script with
+`register_extraction_template`.
+
+| field | type | notes |
+|---|---|---|
+| `targetUrl` | string | absolute URL to render |
+| `cookieString` | string, optional | session cookies to use for this render only |
+| `proxyUrl` | string, optional | Playwright context proxy URL |
 
 ### `batch_download_assets`
 

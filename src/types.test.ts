@@ -70,6 +70,15 @@ describe('ExecuteNativeExtractionInputSchema', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it('accepts an inline script and draft output schema for dry-runs', () => {
+    const result = ExecuteNativeExtractionInputSchema.safeParse({
+      targetUrl: 'https://example.com',
+      executableScript: '() => ({ title: document.title })',
+      outputSchema: { type: 'object' },
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('ConnectAppInputSchema', () => {

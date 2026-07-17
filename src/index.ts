@@ -30,6 +30,7 @@ import {
   openAppConnection,
   confirmOpenAppConnection,
   startConfiguredAppConnections,
+  renderPage,
 } from './engine.js';
 import { saveCookies, getSavedCookies } from './cookie-store.js';
 import { addFromRegistry } from './registry-client.js';
@@ -47,6 +48,10 @@ import {
   registerConfirmAppConnectionTool,
   registerListAppConnectionsTool,
 } from './tools/app-connections-tools.js';
+import { registerSynthesizeSchemaTool } from './tools/synthesize-schema.js';
+
+type ValidateOutput = (value: unknown, schema: Record<string, unknown>) => unknown;
+const executeNativeExtractionDeps: { validateOutput?: ValidateOutput } = {};
 
 let updateStatus: UpdateStatus = { updateAvailable: false, latestCommit: null };
 
@@ -76,7 +81,9 @@ async function runExtraction(
   simulateLowBandwidth?: boolean,
   headful?: boolean,
   useSavedCookies?: boolean,
-  connectionId?: string
+  connectionId?: string,
+  executableScript?: string,
+  kind = 'extraction'
 ): Promise<ExtractionResult> {
   const startedAt = Date.now();
   const buildMeta = (id: string, domainMatched: string, resolvedUrl: string) => ({
@@ -96,6 +103,23 @@ async function runExtraction(
   });
 
   try {
+    if (executableScript) {
+      if (!targetUrl) {
+        const error = 'targetUrl is required when executableScript is provided';
+        await reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message: error });
+        return { success: false, error, meta: buildMeta('', '', '') };
+      }
+      const data = await executeExtraction({
+        targetUrl,
+        executableScript,
+        proxyUrl,
+        cookieString,
+        simulateLowBandwidth: simulateLowBandwidth ?? true,
+      });
+      await logExtractionMetric('', targetUrl, Array.isArray(data) ? data.length : data ? 1 : 0);
+      await reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: targetUrl });
+      return { success: true, data, meta: buildMeta('', '', targetUrl) };
+    }
     const manifest = await loadManifest();
     const entry = templateId
       ? findTemplateById(manifest, templateId)
@@ -248,10 +272,21 @@ server.tool('execute_native_extraction', ExecuteNativeExtractionShape, async (in
     undefined,
     undefined,
     undefined,
-    input.connectionId
+    input.connectionId,
+    input.executableScript,
+    input.executableScript ? 'synthesize-dry-run' : undefined
   );
+  const schemaValidation =
+    input.outputSchema && executeNativeExtractionDeps.validateOutput && result.success
+      ? executeNativeExtractionDeps.validateOutput(result.data, input.outputSchema)
+      : undefined;
   return {
-    content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+    content: [
+      {
+        type: 'text' as const,
+        text: JSON.stringify(input.executableScript ? { ...result, dryRun: true, ...(schemaValidation === undefined ? {} : { schemaValidation }) } : result, null, 2),
+      },
+    ],
     isError: !result.success,
   };
 });
@@ -266,6 +301,7 @@ const appConnectionsToolDeps = {
 registerConnectAppTool(server, appConnectionsToolDeps);
 registerConfirmAppConnectionTool(server, appConnectionsToolDeps);
 registerListAppConnectionsTool(server, appConnectionsToolDeps);
+registerSynthesizeSchemaTool(server, { renderPage });
 
 // Persist session cookies for a template WITHOUT running it, so a cookie mentioned in a
 // chat lands in the dashboard's saved-cookies store (badge + "Use saved cookies" button).

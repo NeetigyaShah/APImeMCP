@@ -175,6 +175,15 @@ function assertJsonSerializable(value: unknown): unknown {
 interface ForensicPaths {
   screenshotPath: string;
   domPath: string;
+  html: string;
+}
+
+function createBrowserContext(proxyUrl?: string): Promise<BrowserContext> {
+  return getBrowser().newContext({
+    userAgent: USER_AGENT,
+    viewport: VIEWPORT,
+    ...(proxyUrl ? { proxy: parseProxy(proxyUrl) } : {}),
+  });
 }
 
 async function captureForensics(page: Page): Promise<ForensicPaths> {
@@ -183,14 +192,45 @@ async function captureForensics(page: Page): Promise<ForensicPaths> {
   const prefix = `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`;
   const screenshotPath = path.join(logsDir, `${prefix}-screenshot.png`);
   const domPath = path.join(logsDir, `${prefix}-dom.html`);
+  const html = await page.content();
   await page.screenshot({ path: screenshotPath, fullPage: true });
-  await fs.writeFile(domPath, await page.content());
-  return { screenshotPath, domPath };
+  await fs.writeFile(domPath, html);
+  return { screenshotPath, domPath, html };
+}
+
+export interface PageForensics {
+  html: string;
+  screenshotPath?: string;
+  url: string;
+  capturedAt: string;
+}
+
+export async function renderPage(
+  targetUrl: string,
+  opts: { cookieString?: string; proxyUrl?: string } = {}
+): Promise<PageForensics> {
+  const context = await createBrowserContext(opts.proxyUrl);
+  try {
+    if (opts.cookieString) {
+      await context.addCookies(parseCookieString(opts.cookieString, targetUrl));
+    }
+    const page = await context.newPage();
+    try {
+      await page.goto(targetUrl, { timeout: NAVIGATION_TIMEOUT_MS, waitUntil: DEFAULT_WAIT_STRATEGY });
+      const { html, screenshotPath } = await captureForensics(page);
+      return { html, screenshotPath, url: page.url(), capturedAt: new Date().toISOString() };
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  } finally {
+    await context.close();
+  }
 }
 
 export interface ExecuteExtractionOptions {
   targetUrl: string;
-  scriptPath: string;
+  scriptPath?: string;
+  executableScript?: string;
   proxyUrl?: string;
   // ponytail: trusted-operator params, same trust model as targetUrl/proxyUrl above —
   // this is a single-user local tool, not a multi-tenant service. Point cookieString
@@ -217,11 +257,7 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
   const persistentContext = options.connectionId ? await ensureAppContext(options.connectionId) : undefined;
   const context =
     persistentContext ??
-    (await getBrowser().newContext({
-      userAgent: USER_AGENT,
-      viewport: VIEWPORT,
-      ...(options.proxyUrl ? { proxy: parseProxy(options.proxyUrl) } : {}),
-    }));
+    (await createBrowserContext(options.proxyUrl));
   try {
     if (options.cookieString) {
       await context.addCookies(parseCookieString(options.cookieString, options.targetUrl));
@@ -267,7 +303,8 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
       if (options.readySelector) {
         await page.waitForSelector(options.readySelector, { timeout: NAVIGATION_TIMEOUT_MS });
       }
-      const script = await fs.readFile(path.resolve(process.cwd(), options.scriptPath), 'utf8');
+      const script = options.executableScript ?? (options.scriptPath ? await fs.readFile(path.resolve(process.cwd(), options.scriptPath), 'utf8') : undefined);
+      if (!script) throw new Error('scriptPath or executableScript is required');
       // ponytail: page.evaluate(stringExpression) does NOT auto-invoke a bare function
       // expression (verified live: `page.evaluate('() => 42')` returns undefined, not 42) -
       // it only awaits a promise if the expression's own evaluation already produced one.
