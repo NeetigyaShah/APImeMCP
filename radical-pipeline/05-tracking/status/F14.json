@@ -12,12 +12,12 @@
     "S8": "Done",
     "S9": "Done",
     "S10": "N/A",
-    "S11": "Todo"
+    "S11": "Done"
   },
-  "overall": "In-Progress",
-  "currentGate": "G7",
+  "overall": "Done",
+  "currentGate": "G8",
   "blockedBy": null,
   "owner": "f14-builder",
   "reviewer": null,
-  "updatedAt": "2026-07-17T08:55:39.063Z"
+  "updatedAt": "2026-07-17T09:09:49.412Z"
 }

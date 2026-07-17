@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { withLock } from './lock.js';
 import { MeasureRecordSchema } from './types.js';
-import type { MeasureRecord, TemplateSla } from './types.js';
+import type { MeasureRecord, RunKind, TemplateSla } from './types.js';
 
 function getMetricsDirectory(): string {
   return path.join(path.resolve(process.cwd()), 'templates');
@@ -81,6 +81,16 @@ async function migrateLegacyCsvIfPresentLocked(): Promise<void> {
 
 export async function migrateLegacyCsvIfPresent(): Promise<void> {
   await withLock(migrateLegacyCsvIfPresentLocked);
+}
+
+export function preExecutionMeasure(
+  templateId?: string,
+  targetUrl?: string
+): { templateId: string; kind: RunKind } {
+  return {
+    templateId: templateId ?? (targetUrl ? 'unmatched-domain' : 'no-input'),
+    kind: 'extraction',
+  };
 }
 
 export async function recordMeasure(record: MeasureRecord): Promise<void> {

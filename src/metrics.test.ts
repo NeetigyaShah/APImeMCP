@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { getAllSla, getTemplateSla, migrateLegacyCsvIfPresent, recordMeasure } from './metrics.js';
+import { getAllSla, getTemplateSla, migrateLegacyCsvIfPresent, preExecutionMeasure, recordMeasure } from './metrics.js';
+import { MeasureRecordSchema } from './types.js';
 
 let originalCwd: string;
 let tempDir: string;
@@ -19,6 +20,24 @@ afterEach(async () => {
 });
 
 describe('metrics SLA store', () => {
+  it('uses schema-valid IDs for unmatched-domain and no-input pre-execution failures', () => {
+    const baseRecord = {
+      kind: 'extraction' as const,
+      success: false,
+      durationMs: 0,
+      timestamp: '2026-07-17T08:00:00.000Z',
+      error: 'pre-execution failure',
+    };
+
+    expect(MeasureRecordSchema.parse({ ...baseRecord, ...preExecutionMeasure(undefined, 'https://unmatched.example') })).toMatchObject({
+      templateId: 'unmatched-domain',
+    });
+    expect(MeasureRecordSchema.parse({ ...baseRecord, ...preExecutionMeasure() })).toMatchObject({
+      templateId: 'no-input',
+    });
+    expect(preExecutionMeasure('unknown-template')).toMatchObject({ templateId: 'unknown-template' });
+  });
+
   it('appends validated measure records as JSON Lines', async () => {
     const record = {
       templateId: 'sample-template',
