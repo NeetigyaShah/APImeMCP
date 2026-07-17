@@ -4,7 +4,7 @@ import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { ActionSequence, ActionStep, ExtractionMeta, ExtractionResult, RunKind, WaitStrategy } from './types.js';
+import type { ActionSequence, ActionStep, ExtractionMeta, ExtractionResult, MeasureRecord, RunKind, WaitStrategy } from './types.js';
 import { recordMeasure } from './metrics.js';
 import { validateOutput } from './schema.js';
 import {
@@ -46,7 +46,8 @@ const appContexts = new Map<string, BrowserContext>();
 
 export async function executeMeasured<T>(
   measure: { templateId: string; kind: RunKind },
-  operation: () => Promise<T>
+  operation: () => Promise<T>,
+  enrichMeasure?: (result: T) => Pick<MeasureRecord, 'driftDetected' | 'driftEntryCount'> | undefined,
 ): Promise<T> {
   const startedAt = Date.now();
   let result!: T;
@@ -66,7 +67,7 @@ export async function executeMeasured<T>(
         timestamp,
         error: operationError instanceof Error ? operationError.message : String(operationError),
       }
-    : { ...measure, success: true, durationMs: Date.now() - startedAt, timestamp };
+    : { ...measure, success: true, durationMs: Date.now() - startedAt, timestamp, ...(enrichMeasure ? enrichMeasure(result) : {}) };
   await recordMeasure(record);
 
   if (operationError) throw operationError;

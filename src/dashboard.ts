@@ -377,8 +377,8 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
     <h2>Extraction stats</h2>
     <div class="printout" id="stats">
       <table class="crontab">
-        <thead><tr><th>template</th><th>runs</th><th>success rate</th><th>p95 latency</th><th>last run</th></tr></thead>
-        <tbody><tr><td colspan="5" class="empty">No extraction measures yet.</td></tr></tbody>
+        <thead><tr><th>template</th><th>runs</th><th>success rate</th><th>p95 latency</th><th>drift</th><th>last run</th></tr></thead>
+        <tbody><tr><td colspan="6" class="empty">No extraction measures yet.</td></tr></tbody>
       </table>
     </div>
   </section>
@@ -480,7 +480,8 @@ async function pollStats() {
     body.innerHTML = payload.templates.map(function (sla) {
       return '<tr><td>' + sla.templateId + '</td><td>' + sla.runs + '</td><td>' +
         Math.round(sla.successRate * 100) + '%</td><td>' + Math.round(sla.p95DurationMs) +
-        ' ms</td><td>' + new Date(sla.lastRunAt).toLocaleString() + '</td></tr>';
+        ' ms</td><td>' + sla.driftCount + (sla.lastDriftAt ? ' (last ' + new Date(sla.lastDriftAt).toLocaleString() + ')' : '') +
+        '</td><td>' + new Date(sla.lastRunAt).toLocaleString() + '</td></tr>';
     }).join('');
   } catch {
     // non-fatal

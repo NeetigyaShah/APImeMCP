@@ -3,6 +3,7 @@
 ## Extraction SLA metrics
 
 Each extraction and action-sequence run is stored in `templates/extraction_metrics.jsonl`.
+Runs with an `outputSchema` also report itemized shape drift through `get_extraction_stats` and the dashboard (`driftCount` and `lastDriftAt`).
 `get_extraction_stats` returns `{ templates: TemplateSla[] }` with per-template success rate,
 average/p50/p95 latency, last-run time, and the most recent error. Existing
 `templates/extraction_metrics.csv` data is migrated once on first metrics access.

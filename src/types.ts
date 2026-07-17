@@ -228,6 +228,8 @@ export const MeasureRecordSchema = z
     durationMs: z.number().finite().nonnegative(),
     timestamp: z.string().datetime(),
     error: z.string().optional(),
+    driftDetected: z.boolean().optional(),
+    driftEntryCount: z.number().int().nonnegative().optional(),
   })
   .refine((record) => (record.success ? record.error === undefined : record.error !== undefined), {
     message: 'error must be absent when success is true and required when success is false',
@@ -245,4 +247,6 @@ export interface TemplateSla {
   p95DurationMs: number;
   lastRunAt: string;
   lastError?: string;
+  driftCount: number;
+  lastDriftAt?: string;
 }

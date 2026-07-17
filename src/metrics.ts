@@ -132,6 +132,7 @@ function toSla(templateId: string, records: MeasureRecord[]): TemplateSla {
   const durations = records.map((record) => record.durationMs).sort((left, right) => left - right);
   const successCount = records.filter((record) => record.success).length;
   const latestFailure = [...sortedByTimestamp].reverse().find((record) => !record.success);
+  const driftRecords = sortedByTimestamp.filter((record) => record.driftDetected === true);
   return {
     templateId,
     runs: records.length,
@@ -142,6 +143,8 @@ function toSla(templateId: string, records: MeasureRecord[]): TemplateSla {
     p95DurationMs: nearestRank(durations, 95),
     lastRunAt: sortedByTimestamp.at(-1)?.timestamp ?? '',
     ...(latestFailure?.error ? { lastError: latestFailure.error } : {}),
+    driftCount: driftRecords.length,
+    ...(driftRecords.at(-1) ? { lastDriftAt: driftRecords.at(-1)!.timestamp } : {}),
   };
 }
 

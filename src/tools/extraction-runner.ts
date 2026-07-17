@@ -1,5 +1,6 @@
 import type { ActionSequence, ExtractionResult, Manifest, ManifestEntry, RunKind } from '../types.js';
 import type { ExecuteActionSequenceOptions, ExecuteExtractionOptions } from '../engine.js';
+import { checkDrift } from '../drift.js';
 
 export interface ExtractionRunnerDeps {
   loadManifest: () => Promise<Manifest>;
@@ -14,7 +15,7 @@ export interface ExtractionRunnerDeps {
   getAppConnection: (connectionId: string) => Promise<{ domainPattern: string; status: string } | undefined>;
   saveCookies: (templateId: string, cookieString: string) => Promise<void>;
   getSavedCookies: (templateId: string) => Promise<string | undefined>;
-  executeMeasured: <T>(measure: { templateId: string; kind: RunKind }, operation: () => Promise<T>) => Promise<T>;
+  executeMeasured: <T>(measure: { templateId: string; kind: RunKind }, operation: () => Promise<T>, enrichMeasure?: (result: T) => { driftDetected?: boolean; driftEntryCount?: number } | undefined) => Promise<T>;
   preExecutionMeasure: (templateId?: string, targetUrl?: string) => { templateId: string; kind: RunKind };
   reportProgress: (update: { tool: string; status: 'running' | 'done' | 'failed'; current: number; total: number; message: string }) => Promise<void>;
   logError: (message: string) => void;
@@ -123,7 +124,11 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
         readySelector: entry.readySelector,
         networkAllowlist: entry.source === 'registry' ? entry.allowedDomains ?? [] : undefined,
         onNetworkRequest,
-      }));
+      }), (result) => {
+        if (!entry.outputSchema) return undefined;
+        const drift = checkDrift(entry.templateId, entry.outputSchema, result);
+        return { driftDetected: drift.hasDrift, driftEntryCount: drift.entries.length };
+      });
       await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
       return deps.createSuccessfulResult(data, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema);
     } catch (error) {
