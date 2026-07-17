@@ -25,6 +25,8 @@
 - F03 local G2 review rejected `213c869`: `scripts/verify-registry.mjs` calls `executeExtraction` and measures duration itself instead of using the required in-process `runExtraction` path. That bypasses ADR-04's extraction measurement/metric contract and violates the explicit no-reimplementation requirement. A fresh F03 repair builder is queued.
 - F01 post-repair G3 rejected `3b15327`: schema validation remains wired into `src/index.ts` rather than the engine boundary, contrary to ADR-02's composition-only rule for the entrypoint. A fresh F01 architecture-repair builder is queued.
 - F03 re-review reported `npm run lint` unavailable. The repository has no lint script at baseline; per the governing G1 definition (`npm run build` plus `npm test`), this is recorded as a tooling gap rather than an F03 regression. Its repaired runner wiring uses exported `runExtraction` and the agreed G1/G2/G5/G6 checks pass.
+- F14 G2 rejected `d860680`: unknown-template failures return before `executeMeasured`, so no JSONL SLA measurement exists and the calculated success rate is biased. A fresh F14 repair builder is required.
+- F01 final G3 rejected `b4decfe`: while schema validation is now at the engine boundary, `src/index.ts` still owns extraction orchestration and inline tool handlers. This exposes the uncompleted ADR-02 Wave 0 boundary; a fresh F01 architecture-repair builder is required.
 
 ## Agent Failures
 
