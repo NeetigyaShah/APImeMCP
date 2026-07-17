@@ -15,7 +15,19 @@
 - G7 passed: F00 rebased as `cecf7b6`, merged to `integration`, and tracker finalization committed as `5aca9a2`. Merge-result validation passed `npm run build` and `npm test` (64 tests).
 - Promotion policy: eligible Program 1 features run in isolated worktrees and merge only to `integration`; `master` is held until the complete engine build is green.
 
+## 2026-07-17 - Program 1 / Wave 1
+
+- F01 builder completed `00af630` with its local checks green. G2 rejected it: its module-level Ajv validator cache is unbounded for reloaded schema objects, and registry imports drop `outputSchema`. A fresh F01 repair builder is required.
+- F05 builder completed `d0454cc` with its local checks green. G2 rejected it: dry runs write metrics, the verifier does not detect that write, and an empty inline script can fall back to a registered template. A fresh F05 repair builder is required.
+- F03 builder completed `213c869` with build, test, verifier, and package-dry-run checks green; it awaits independent gates.
+- F22 launch was rejected by the multi-agent runtime's thread cap. It remains queued; no source or tracker state was changed by the failed launch.
+- After F22 started, an F03 stateless-review launch was also rejected by the runtime thread cap. F03 has independently passed build, 37 tests, and `verify-F03`; it remains queued for its reviewer verdict.
+- F03 local G2 review rejected `213c869`: `scripts/verify-registry.mjs` calls `executeExtraction` and measures duration itself instead of using the required in-process `runExtraction` path. That bypasses ADR-04's extraction measurement/metric contract and violates the explicit no-reimplementation requirement. A fresh F03 repair builder is queued.
+- F01 post-repair G3 rejected `3b15327`: schema validation remains wired into `src/index.ts` rather than the engine boundary, contrary to ADR-02's composition-only rule for the entrypoint. A fresh F01 architecture-repair builder is queued.
+
 ## Agent Failures
 
 - Multiple builders and reviewers stalled during `npx skills check` or read-only review despite no required F00 skill installation. Their uncommitted work was retained or their agent was closed before replacement.
 - Future agents receive explicit worktree ownership, narrowed deliverables, and time-bounded handoffs. Any failure is added here and reported in chat immediately.
+- F01 and F05 are blocked by recorded G2 defects, not by infrastructure. Their original reviewer agents returned explicit rejection verdicts and will be replaced by fresh repair builders.
+- F22 could not start because the agent-runtime concurrency cap was occupied. The orchestrator is reclaiming completed agents before retrying it.
