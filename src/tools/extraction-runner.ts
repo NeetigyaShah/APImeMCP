@@ -1,0 +1,124 @@
+import type { ActionSequence, ExtractionResult, Manifest, ManifestEntry } from '../types.js';
+import type { ExecuteActionSequenceOptions, ExecuteExtractionOptions } from '../engine.js';
+
+export interface ExtractionRunnerDeps {
+  loadManifest: () => Promise<Manifest>;
+  findTemplateById: (manifest: Manifest, templateId: string) => ManifestEntry | undefined;
+  findTemplateByUrl: (manifest: Manifest, targetUrl: string) => ManifestEntry | undefined;
+  readFile: (path: string, encoding: 'utf8') => Promise<string>;
+  resolvePath: (...paths: string[]) => string;
+  executeExtraction: (options: ExecuteExtractionOptions) => Promise<unknown>;
+  executeActionSequence: (options: ExecuteActionSequenceOptions) => Promise<void>;
+  createSuccessfulResult: (data: unknown, meta: ExtractionResult['meta'], outputSchema?: Record<string, unknown>) => ExtractionResult;
+  registryCdnAllowlist: string[];
+  getAppConnection: (connectionId: string) => Promise<{ domainPattern: string; status: string } | undefined>;
+  saveCookies: (templateId: string, cookieString: string) => Promise<void>;
+  getSavedCookies: (templateId: string) => Promise<string | undefined>;
+  logExtractionMetric: (templateId: string, targetUrl: string, imageCount: number) => Promise<void>;
+  reportProgress: (update: { tool: string; status: 'running' | 'done' | 'failed'; current: number; total: number; message: string }) => Promise<void>;
+  logError: (message: string) => void;
+}
+
+export function createExtractionRunner(deps: ExtractionRunnerDeps) {
+  return async function runExtraction(
+    targetUrl?: string,
+    templateId?: string,
+    proxyUrl?: string,
+    cookieString?: string,
+    simulateLowBandwidth?: boolean,
+    headful?: boolean,
+    useSavedCookies?: boolean,
+    connectionId?: string,
+    executableScript?: string,
+    _kind = 'extraction',
+  ): Promise<ExtractionResult> {
+    const isDryRun = executableScript !== undefined;
+    const startedAt = Date.now();
+    const buildMeta = (id: string, domainMatched: string, resolvedUrl: string) => ({
+      url: resolvedUrl,
+      templateId: id,
+      domainMatched,
+      durationMs: Date.now() - startedAt,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (!isDryRun) {
+      await deps.reportProgress({ tool: 'execute_native_extraction', status: 'running', current: 0, total: 1, message: targetUrl ?? templateId ?? '' });
+    }
+
+    try {
+      if (isDryRun) {
+        if (!targetUrl) {
+          return { success: false, error: 'targetUrl is required when executableScript is provided', meta: buildMeta('', '', '') };
+        }
+        const data = await deps.executeExtraction({
+          targetUrl,
+          executableScript,
+          proxyUrl,
+          cookieString,
+          simulateLowBandwidth: simulateLowBandwidth ?? true,
+          captureForensicsOnError: false,
+        });
+        return { success: true, data, meta: buildMeta('', '', targetUrl) };
+      }
+      const manifest = await deps.loadManifest();
+      const entry = templateId ? deps.findTemplateById(manifest, templateId) : targetUrl ? deps.findTemplateByUrl(manifest, targetUrl) : undefined;
+      if (!entry) {
+        const error = templateId ? `No registered template with templateId "${templateId}"` : targetUrl ? `No registered template matches the domain for ${targetUrl}` : 'targetUrl or templateId is required';
+        await deps.reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message: error });
+        return { success: false, error, meta: buildMeta(templateId ?? '', '', targetUrl ?? '') };
+      }
+
+      const resolvedUrl = targetUrl ?? entry.fixedTargetUrl;
+      if (!resolvedUrl) {
+        const error = `Template "${entry.templateId}" has no fixedTargetUrl registered; targetUrl is required`;
+        await deps.reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message: error });
+        return { success: false, error, meta: buildMeta(entry.templateId, entry.domainPattern, '') };
+      }
+
+      if (connectionId) {
+        if (cookieString || useSavedCookies) throw new Error('connectionId cannot be combined with cookieString or useSavedCookies');
+        const connection = await deps.getAppConnection(connectionId);
+        if (!connection) throw new Error(`No app connection configured for "${connectionId}"`);
+        if (connection.status !== 'connected') throw new Error(`App connection "${connectionId}" is not connected; log in and call confirm_app_connection first`);
+        const targetHostname = new URL(resolvedUrl).hostname.toLowerCase();
+        const matchesConnection = targetHostname === connection.domainPattern || targetHostname.endsWith(`.${connection.domainPattern}`);
+        if (!matchesConnection) throw new Error(`targetUrl hostname "${targetHostname}" does not match app connection "${connectionId}" (${connection.domainPattern})`);
+      }
+
+      if (entry.kind === 'action-sequence') {
+        const raw = await deps.readFile(deps.resolvePath(process.cwd(), entry.scriptPath), 'utf8');
+        const sequence = JSON.parse(raw) as ActionSequence;
+        await deps.executeActionSequence({ sequence, proxyUrl, simulateLowBandwidth, headful, connectionId, networkAllowlist: entry.source === 'registry' ? [entry.domainPattern, ...deps.registryCdnAllowlist] : undefined });
+        await deps.logExtractionMetric(entry.templateId, resolvedUrl, 0);
+        await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
+        return deps.createSuccessfulResult({ completedSteps: sequence.steps.length }, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema);
+      }
+
+      if (!connectionId && cookieString) await deps.saveCookies(entry.templateId, cookieString);
+      const effectiveCookies = connectionId ? undefined : cookieString || (useSavedCookies ? await deps.getSavedCookies(entry.templateId) : undefined);
+      const data = await deps.executeExtraction({
+        targetUrl: resolvedUrl,
+        scriptPath: entry.scriptPath,
+        proxyUrl,
+        cookieString: effectiveCookies,
+        connectionId,
+        simulateLowBandwidth: simulateLowBandwidth ?? true,
+        waitStrategy: entry.waitStrategy,
+        readySelector: entry.readySelector,
+        networkAllowlist: entry.source === 'registry' ? [entry.domainPattern, ...deps.registryCdnAllowlist] : undefined,
+      });
+      const imageCount = Array.isArray(data) ? data.length : data ? 1 : 0;
+      await deps.logExtractionMetric(entry.templateId, resolvedUrl, imageCount);
+      await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
+      return deps.createSuccessfulResult(data, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      deps.logError(`execute_native_extraction failed: ${message}`);
+      if (!isDryRun) {
+        await deps.reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message });
+      }
+      return { success: false, error: message, meta: buildMeta(templateId ?? '', '', targetUrl ?? '') };
+    }
+  };
+}
