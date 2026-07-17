@@ -5,11 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ensureStorageInitialized, findTemplateById, findTemplateByUrl, loadManifest, registerTemplate } from './storage.js';
-import { closeBrowser, confirmOpenAppConnection, createSuccessfulExtractionResult, executeActionSequence, executeExtraction, initBrowser, isBrowserReady, openAppConnection, REGISTRY_CDN_ALLOWLIST, renderPage, startConfiguredAppConnections } from './engine.js';
+import { closeBrowser, confirmOpenAppConnection, createSuccessfulExtractionResult, executeActionSequence, executeExtraction, executeMeasured, initBrowser, isBrowserReady, openAppConnection, REGISTRY_CDN_ALLOWLIST, renderPage, startConfiguredAppConnections } from './engine.js';
 import { getSavedCookies, saveCookies } from './cookie-store.js';
 import { addFromRegistry } from './registry-client.js';
 import { batchDownload } from './downloader.js';
-import { getExtractionStats, logExtractionMetric } from './metrics.js';
+import { getAllSla, preExecutionMeasure } from './metrics.js';
 import { sendNotification } from './notifier.js';
 import { Scheduler } from './scheduler.js';
 import { reportProgress } from './progress.js';
@@ -63,7 +63,8 @@ export const runExtraction = createExtractionRunner({
   getAppConnection,
   saveCookies,
   getSavedCookies,
-  logExtractionMetric,
+  executeMeasured,
+  preExecutionMeasure,
   reportProgress,
   logError,
 });
@@ -80,7 +81,7 @@ const deps: ToolDeps = {
   templates: { register: registerTemplate },
   cookies: { save: saveCookies },
   scheduler,
-  metrics: { getStats: getExtractionStats },
+  metrics: { getStats: getAllSla },
   notifications: { send: sendNotification },
   downloads: { batch: batchDownload },
   registry: { add: addFromRegistry },

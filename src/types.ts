@@ -212,3 +212,33 @@ export interface ExtractionResult {
   meta: ExtractionMeta;
   schemaValidation?: ValidationResult;
 }
+
+export const RunKindSchema = z.enum(['extraction', 'action-sequence', 'static-http']);
+export type RunKind = z.infer<typeof RunKindSchema>;
+
+export const MeasureRecordSchema = z
+  .object({
+    templateId: z.string().min(1),
+    kind: RunKindSchema,
+    success: z.boolean(),
+    durationMs: z.number().finite().nonnegative(),
+    timestamp: z.string().datetime(),
+    error: z.string().optional(),
+  })
+  .refine((record) => (record.success ? record.error === undefined : record.error !== undefined), {
+    message: 'error must be absent when success is true and required when success is false',
+    path: ['error'],
+  });
+export type MeasureRecord = z.infer<typeof MeasureRecordSchema>;
+
+export interface TemplateSla {
+  templateId: string;
+  runs: number;
+  successCount: number;
+  successRate: number;
+  avgDurationMs: number;
+  p50DurationMs: number;
+  p95DurationMs: number;
+  lastRunAt: string;
+  lastError?: string;
+}

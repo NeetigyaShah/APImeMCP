@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { loadManifest, registerActionSequenceTemplate, updateVerificationStatus } from './storage.js';
 import { RegisterExtractionTemplateShape, ScheduleStockCheckShape, isHttpUrl } from './types.js';
 import type { Manifest, ExtractionResult, ActionStep } from './types.js';
-import { getExtractionStats } from './metrics.js';
+import { getAllSla } from './metrics.js';
 import { buildUsageMarkdown, renderDocsPage, getUsagePath } from './usage.js';
 import { templatesWithSavedCookies, saveCookies } from './cookie-store.js';
 import { getProgress, reportDashboardStatus } from './progress.js';
@@ -376,9 +376,10 @@ function renderDashboard(manifest: Manifest, browserReady: boolean, cookieSet: S
   <section>
     <h2>Extraction stats</h2>
     <div class="printout" id="stats">
-      <div><div class="stat-label">Total images</div><div class="stat-value">—</div></div>
-      <div><div class="stat-label">Last run</div><div class="stat-value">—</div></div>
-      <div class="domains"></div>
+      <table class="crontab">
+        <thead><tr><th>template</th><th>runs</th><th>success rate</th><th>p95 latency</th><th>last run</th></tr></thead>
+        <tbody><tr><td colspan="5" class="empty">No extraction measures yet.</td></tr></tbody>
+      </table>
     </div>
   </section>
 
@@ -473,11 +474,14 @@ async function pollProgress() {
 async function pollStats() {
   try {
     const res = await fetch('/api/stats');
-    const stats = await res.json();
-    const el = document.getElementById('stats');
-    el.children[0].querySelector('.stat-value').textContent = stats.totalImages;
-    el.children[1].querySelector('.stat-value').textContent = stats.lastSuccessfulRun ? new Date(stats.lastSuccessfulRun).toLocaleString() : 'never';
-    el.children[2].textContent = stats.recentDomains.length ? 'Recent domains: ' + stats.recentDomains.join(', ') : 'No extractions logged yet.';
+    const payload = await res.json();
+    const body = document.querySelector('#stats tbody');
+    if (!payload.templates.length) return;
+    body.innerHTML = payload.templates.map(function (sla) {
+      return '<tr><td>' + sla.templateId + '</td><td>' + sla.runs + '</td><td>' +
+        Math.round(sla.successRate * 100) + '%</td><td>' + Math.round(sla.p95DurationMs) +
+        ' ms</td><td>' + new Date(sla.lastRunAt).toLocaleString() + '</td></tr>';
+    }).join('');
   } catch {
     // non-fatal
   }
@@ -677,7 +681,7 @@ export function startDashboard(deps: DashboardDeps): void {
   });
 
   app.get('/api/stats', async (_req, res) => {
-    res.json(await getExtractionStats());
+    res.json({ templates: await getAllSla() });
   });
 
   app.get('/api/jobs', (_req, res) => {

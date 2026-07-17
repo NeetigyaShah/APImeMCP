@@ -4,7 +4,8 @@ import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { ActionSequence, ActionStep, ExtractionMeta, ExtractionResult, WaitStrategy } from './types.js';
+import type { ActionSequence, ActionStep, ExtractionMeta, ExtractionResult, RunKind, WaitStrategy } from './types.js';
+import { recordMeasure } from './metrics.js';
 import { validateOutput } from './schema.js';
 import {
   confirmAppConnection,
@@ -42,6 +43,35 @@ export function createSuccessfulExtractionResult(
 
 let browserInstance: Browser | undefined;
 const appContexts = new Map<string, BrowserContext>();
+
+export async function executeMeasured<T>(
+  measure: { templateId: string; kind: RunKind },
+  operation: () => Promise<T>
+): Promise<T> {
+  const startedAt = Date.now();
+  let result!: T;
+  let operationError: unknown;
+  try {
+    result = await operation();
+  } catch (error) {
+    operationError = error;
+  }
+
+  const timestamp = new Date().toISOString();
+  const record = operationError
+    ? {
+        ...measure,
+        success: false,
+        durationMs: Date.now() - startedAt,
+        timestamp,
+        error: operationError instanceof Error ? operationError.message : String(operationError),
+      }
+    : { ...measure, success: true, durationMs: Date.now() - startedAt, timestamp };
+  await recordMeasure(record);
+
+  if (operationError) throw operationError;
+  return result;
+}
 
 export async function initBrowser(): Promise<void> {
   if (browserInstance) return;

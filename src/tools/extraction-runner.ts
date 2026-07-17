@@ -1,4 +1,4 @@
-import type { ActionSequence, ExtractionResult, Manifest, ManifestEntry } from '../types.js';
+import type { ActionSequence, ExtractionResult, Manifest, ManifestEntry, RunKind } from '../types.js';
 import type { ExecuteActionSequenceOptions, ExecuteExtractionOptions } from '../engine.js';
 
 export interface ExtractionRunnerDeps {
@@ -14,7 +14,8 @@ export interface ExtractionRunnerDeps {
   getAppConnection: (connectionId: string) => Promise<{ domainPattern: string; status: string } | undefined>;
   saveCookies: (templateId: string, cookieString: string) => Promise<void>;
   getSavedCookies: (templateId: string) => Promise<string | undefined>;
-  logExtractionMetric: (templateId: string, targetUrl: string, imageCount: number) => Promise<void>;
+  executeMeasured: <T>(measure: { templateId: string; kind: RunKind }, operation: () => Promise<T>) => Promise<T>;
+  preExecutionMeasure: (templateId?: string, targetUrl?: string) => { templateId: string; kind: RunKind };
   reportProgress: (update: { tool: string; status: 'running' | 'done' | 'failed'; current: number; total: number; message: string }) => Promise<void>;
   logError: (message: string) => void;
 }
@@ -34,6 +35,8 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
   ): Promise<ExtractionResult> {
     const isDryRun = executableScript !== undefined;
     const startedAt = Date.now();
+    let measure = deps.preExecutionMeasure(templateId, targetUrl);
+    let measurementStarted = false;
     const buildMeta = (id: string, domainMatched: string, resolvedUrl: string) => ({
       url: resolvedUrl,
       templateId: id,
@@ -49,29 +52,38 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
     try {
       if (isDryRun) {
         if (!targetUrl) {
+          measurementStarted = true;
+          await recordFailedRun(deps, measure, 'targetUrl is required when executableScript is provided');
           return { success: false, error: 'targetUrl is required when executableScript is provided', meta: buildMeta('', '', '') };
         }
-        const data = await deps.executeExtraction({
+        measurementStarted = true;
+        const data = await deps.executeMeasured({ templateId: 'no-input', kind: 'extraction' }, () => deps.executeExtraction({
           targetUrl,
           executableScript,
           proxyUrl,
           cookieString,
           simulateLowBandwidth: simulateLowBandwidth ?? true,
           captureForensicsOnError: false,
-        });
+        }));
         return { success: true, data, meta: buildMeta('', '', targetUrl) };
       }
       const manifest = await deps.loadManifest();
       const entry = templateId ? deps.findTemplateById(manifest, templateId) : targetUrl ? deps.findTemplateByUrl(manifest, targetUrl) : undefined;
       if (!entry) {
         const error = templateId ? `No registered template with templateId "${templateId}"` : targetUrl ? `No registered template matches the domain for ${targetUrl}` : 'targetUrl or templateId is required';
+        measurementStarted = true;
+        await recordFailedRun(deps, measure, error);
         await deps.reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message: error });
         return { success: false, error, meta: buildMeta(templateId ?? '', '', targetUrl ?? '') };
       }
 
+      measure = { templateId: entry.templateId, kind: entry.kind ?? 'extraction' };
+
       const resolvedUrl = targetUrl ?? entry.fixedTargetUrl;
       if (!resolvedUrl) {
         const error = `Template "${entry.templateId}" has no fixedTargetUrl registered; targetUrl is required`;
+        measurementStarted = true;
+        await recordFailedRun(deps, measure, error);
         await deps.reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message: error });
         return { success: false, error, meta: buildMeta(entry.templateId, entry.domainPattern, '') };
       }
@@ -89,15 +101,16 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
       if (entry.kind === 'action-sequence') {
         const raw = await deps.readFile(deps.resolvePath(process.cwd(), entry.scriptPath), 'utf8');
         const sequence = JSON.parse(raw) as ActionSequence;
-        await deps.executeActionSequence({ sequence, proxyUrl, simulateLowBandwidth, headful, connectionId, networkAllowlist: entry.source === 'registry' ? [entry.domainPattern, ...deps.registryCdnAllowlist] : undefined });
-        await deps.logExtractionMetric(entry.templateId, resolvedUrl, 0);
+        measurementStarted = true;
+        await deps.executeMeasured(measure, () => deps.executeActionSequence({ sequence, proxyUrl, simulateLowBandwidth, headful, connectionId, networkAllowlist: entry.source === 'registry' ? [entry.domainPattern, ...deps.registryCdnAllowlist] : undefined }));
         await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
         return deps.createSuccessfulResult({ completedSteps: sequence.steps.length }, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema);
       }
 
       if (!connectionId && cookieString) await deps.saveCookies(entry.templateId, cookieString);
       const effectiveCookies = connectionId ? undefined : cookieString || (useSavedCookies ? await deps.getSavedCookies(entry.templateId) : undefined);
-      const data = await deps.executeExtraction({
+      measurementStarted = true;
+      const data = await deps.executeMeasured(measure, () => deps.executeExtraction({
         targetUrl: resolvedUrl,
         scriptPath: entry.scriptPath,
         proxyUrl,
@@ -107,13 +120,15 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
         waitStrategy: entry.waitStrategy,
         readySelector: entry.readySelector,
         networkAllowlist: entry.source === 'registry' ? [entry.domainPattern, ...deps.registryCdnAllowlist] : undefined,
-      });
-      const imageCount = Array.isArray(data) ? data.length : data ? 1 : 0;
-      await deps.logExtractionMetric(entry.templateId, resolvedUrl, imageCount);
+      }));
       await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
       return deps.createSuccessfulResult(data, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (!measurementStarted) {
+        measurementStarted = true;
+        await recordFailedRun(deps, measure, message);
+      }
       deps.logError(`execute_native_extraction failed: ${message}`);
       if (!isDryRun) {
         await deps.reportProgress({ tool: 'execute_native_extraction', status: 'failed', current: 0, total: 1, message });
@@ -121,4 +136,17 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
       return { success: false, error: message, meta: buildMeta(templateId ?? '', '', targetUrl ?? '') };
     }
   };
+}
+
+async function recordFailedRun(
+  deps: Pick<ExtractionRunnerDeps, 'executeMeasured'>,
+  measure: { templateId: string; kind: RunKind },
+  message: string,
+): Promise<void> {
+  const failure = new Error(message);
+  try {
+    await deps.executeMeasured(measure, async () => { throw failure; });
+  } catch (error) {
+    if (error !== failure) throw error;
+  }
 }

@@ -1,5 +1,12 @@
 # APImeMCP
 
+## Extraction SLA metrics
+
+Each extraction and action-sequence run is stored in `templates/extraction_metrics.jsonl`.
+`get_extraction_stats` returns `{ templates: TemplateSla[] }` with per-template success rate,
+average/p50/p95 latency, last-run time, and the most recent error. Existing
+`templates/extraction_metrics.csv` data is migrated once on first metrics access.
+
 An MCP (Model Context Protocol) server that implements a "Compiler Pattern" for
 deterministic web-page data extraction: author a plain JavaScript extraction script
 once per domain, and re-run it deterministically against any matching URL — no

@@ -1,93 +1,152 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { withLock } from './lock.js';
+import { MeasureRecordSchema } from './types.js';
+import type { MeasureRecord, TemplateSla } from './types.js';
 
-const CSV_HEADER = 'timestamp,templateId,url,imageCount\n';
-
-function getMetricsPath(): string {
-  return path.join(path.resolve(process.cwd(), 'templates'), 'extraction_metrics.csv');
+function getMetricsDirectory(): string {
+  return path.join(path.resolve(process.cwd()), 'templates');
 }
 
-function csvEscape(value: string): string {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+function getMetricsPath(): string {
+  return path.join(getMetricsDirectory(), 'extraction_metrics.jsonl');
+}
+
+function getLegacyCsvPath(): string {
+  return path.join(getMetricsDirectory(), 'extraction_metrics.csv');
+}
+
+function getMigrationMarkerPath(): string {
+  return path.join(getMetricsDirectory(), '.extraction_metrics_csv_migrated');
 }
 
 function parseCsvLine(line: string): string[] {
   const fields: string[] = [];
   let current = '';
   let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
+  for (let index = 0; index < line.length; index++) {
+    const character = line[index];
     if (inQuotes) {
-      if (char === '"' && line[i + 1] === '"') {
+      if (character === '"' && line[index + 1] === '"') {
         current += '"';
-        i++;
-      } else if (char === '"') {
+        index++;
+      } else if (character === '"') {
         inQuotes = false;
       } else {
-        current += char;
+        current += character;
       }
-    } else if (char === '"') {
+    } else if (character === '"') {
       inQuotes = true;
-    } else if (char === ',') {
+    } else if (character === ',') {
       fields.push(current);
       current = '';
     } else {
-      current += char;
+      current += character;
     }
   }
   fields.push(current);
   return fields;
 }
 
-export async function logExtractionMetric(templateId: string, url: string, imageCount: number): Promise<void> {
-  await withLock(async () => {
-    const filePath = getMetricsPath();
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    const row = `${new Date().toISOString()},${csvEscape(templateId)},${csvEscape(url)},${imageCount}\n`;
+async function appendRecords(records: MeasureRecord[]): Promise<void> {
+  if (records.length === 0) return;
+  await fs.mkdir(getMetricsDirectory(), { recursive: true });
+  await fs.appendFile(getMetricsPath(), `${records.map((record) => JSON.stringify(record)).join('\n')}\n`, 'utf8');
+}
 
-    const exists = await fs.access(filePath).then(
-      () => true,
-      () => false
+async function migrateLegacyCsvIfPresentLocked(): Promise<void> {
+  const markerPath = getMigrationMarkerPath();
+  const migrated = await fs.access(markerPath).then(() => true, () => false);
+  if (migrated) return;
+
+  let raw: string;
+  try {
+    raw = await fs.readFile(getLegacyCsvPath(), 'utf8');
+  } catch {
+    return;
+  }
+
+  const records = raw
+    .trim()
+    .split('\n')
+    .slice(1)
+    .filter(Boolean)
+    .map(parseCsvLine)
+    .map(([timestamp, templateId]) =>
+      MeasureRecordSchema.parse({ templateId, kind: 'extraction', success: true, durationMs: 0, timestamp })
     );
-    if (!exists) {
-      await fs.writeFile(filePath, CSV_HEADER + row, 'utf8');
-    } else {
-      await fs.appendFile(filePath, row, 'utf8');
-    }
+  await appendRecords(records);
+  await fs.writeFile(markerPath, '', 'utf8');
+}
+
+export async function migrateLegacyCsvIfPresent(): Promise<void> {
+  await withLock(migrateLegacyCsvIfPresentLocked);
+}
+
+export async function recordMeasure(record: MeasureRecord): Promise<void> {
+  const validated = MeasureRecordSchema.parse(record);
+  await withLock(async () => {
+    await migrateLegacyCsvIfPresentLocked();
+    await appendRecords([validated]);
   });
 }
 
-export interface ExtractionStats {
-  totalImages: number;
-  recentDomains: string[];
-  lastSuccessfulRun: string | null;
-}
-
-export async function getExtractionStats(): Promise<ExtractionStats> {
+async function readMeasures(): Promise<MeasureRecord[]> {
+  await migrateLegacyCsvIfPresent();
   let raw: string;
   try {
     raw = await fs.readFile(getMetricsPath(), 'utf8');
   } catch {
-    return { totalImages: 0, recentDomains: [], lastSuccessfulRun: null };
+    return [];
   }
 
-  const lines = raw.trim().split('\n').slice(1).filter(Boolean);
-  let totalImages = 0;
-  const domains: string[] = [];
-  let lastSuccessfulRun: string | null = null;
+  return raw
+    .split('\n')
+    .filter(Boolean)
+    .flatMap((line) => {
+      try {
+        const parsed = MeasureRecordSchema.safeParse(JSON.parse(line));
+        return parsed.success ? [parsed.data] : [];
+      } catch {
+        return [];
+      }
+    });
+}
 
-  for (const line of lines) {
-    const [timestamp, , url, imageCountRaw] = parseCsvLine(line);
-    totalImages += Number(imageCountRaw) || 0;
-    try {
-      domains.push(new URL(url).hostname);
-    } catch {
-      // skip malformed url
-    }
-    lastSuccessfulRun = timestamp;
+function nearestRank(sortedDurations: number[], percentile: number): number {
+  return sortedDurations[Math.max(0, Math.ceil((percentile / 100) * sortedDurations.length) - 1)] ?? 0;
+}
+
+function toSla(templateId: string, records: MeasureRecord[]): TemplateSla {
+  const sortedByTimestamp = [...records].sort((left, right) => left.timestamp.localeCompare(right.timestamp));
+  const durations = records.map((record) => record.durationMs).sort((left, right) => left - right);
+  const successCount = records.filter((record) => record.success).length;
+  const latestFailure = [...sortedByTimestamp].reverse().find((record) => !record.success);
+  return {
+    templateId,
+    runs: records.length,
+    successCount,
+    successRate: successCount / records.length,
+    avgDurationMs: durations.reduce((total, duration) => total + duration, 0) / records.length,
+    p50DurationMs: nearestRank(durations, 50),
+    p95DurationMs: nearestRank(durations, 95),
+    lastRunAt: sortedByTimestamp.at(-1)?.timestamp ?? '',
+    ...(latestFailure?.error ? { lastError: latestFailure.error } : {}),
+  };
+}
+
+export async function getAllSla(): Promise<TemplateSla[]> {
+  const byTemplate = new Map<string, MeasureRecord[]>();
+  for (const record of await readMeasures()) {
+    const records = byTemplate.get(record.templateId) ?? [];
+    records.push(record);
+    byTemplate.set(record.templateId, records);
   }
+  return [...byTemplate.entries()]
+    .map(([templateId, records]) => toSla(templateId, records))
+    .sort((left, right) => left.templateId.localeCompare(right.templateId));
+}
 
-  const recentDomains = Array.from(new Set(domains.slice(-10).reverse()));
-  return { totalImages, recentDomains, lastSuccessfulRun };
+export async function getTemplateSla(templateId: string): Promise<TemplateSla | undefined> {
+  return (await getAllSla()).find((sla) => sla.templateId === templateId);
 }
