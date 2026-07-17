@@ -38,6 +38,7 @@ import { withLock } from './lock.js';
 import { captureHealForensics, listPendingHeals, openHealRegistryPr, readHealTicket, updateHealTicketStatus, verifyHealSubmission, writeHealTicket } from './self-heal.js';
 import { registerListPendingHealsTool, registerRequestTemplateHealTool, registerSubmitTemplateHealTool } from './tools/heal-tools.js';
 import type { HealToolsDeps } from './tools/heal-tools.js';
+import { buildReceipt, exportPublicKey, registerGetPublicKeyTool, registerVerifyReceiptTool, verifyReceipt } from './provenance.js';
 
 let updateStatus: UpdateStatus = { updateAvailable: false, latestCommit: null };
 
@@ -68,6 +69,7 @@ export const runExtraction = createExtractionRunner({
   executeExtraction,
   executeActionSequence,
   createSuccessfulResult: createSuccessfulExtractionResult,
+  buildReceipt,
   registryCdnAllowlist: REGISTRY_CDN_ALLOWLIST,
   getAppConnection,
   saveCookies,
@@ -173,6 +175,8 @@ registerListPipelinesTool(server, pipelineDeps);
 registerRequestTemplateHealTool(server, healDeps);
 registerSubmitTemplateHealTool(server, healDeps);
 registerListPendingHealsTool(server, healDeps);
+registerGetPublicKeyTool(server, { exportPublicKey });
+registerVerifyReceiptTool(server, { exportPublicKey, verifyReceipt });
 
 server.registerPrompt('get_environment_context', {
   title: 'Environment Context',

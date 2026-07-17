@@ -6,6 +6,7 @@ dist/
 Thumbs.db
 output/
 templates/
+templates/provenance-key.json
 templates/snapshots/
 apis/
 bernhardt/

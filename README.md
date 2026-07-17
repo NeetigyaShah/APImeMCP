@@ -28,7 +28,7 @@ with exact input/output shapes and example calls.
    from a domain pattern to that script in `templates/manifest.json`.
 2. `execute_native_extraction` opens the target URL in an isolated Playwright browser
    context, waits for the page to reach `networkidle`, evaluates the matching script,
-   and returns the result. Every successful run logs a metric row automatically. Pass
+   and returns the result with a signed `provenance` receipt. Every successful run logs a metric row automatically. Pass
    `snapshot: "record"` to save a per-template golden result, or `snapshot: "check"`
    to compare against it and receive a value-level regression diff.
 3. `batch_download_assets` takes a list of URLs (e.g. the image URLs an extraction
@@ -461,7 +461,7 @@ Run a registered template against a URL.
 | `outputSchema` | JSON Schema object, optional | draft schema validated when the optional schema validator is available; otherwise omitted without failing the dry-run. |
 | `snapshot` | `'off'\|'record'\|'check'`, optional | record a golden result or compare against the saved per-template snapshot; defaults to `off`. |
 
-Returns `{ success, data?, error?, meta: { url, templateId, domainMatched, durationMs, timestamp }, schemaValidation?, snapshotRecorded?, snapshotCheck? }`. `schemaValidation` is present only when the template declares `outputSchema`, and contains `{ valid, errors? }`; snapshot fields are present only for the selected mode. Golden files are stored locally under `templates/snapshots/`.
+Returns `{ success, data?, error?, meta: { url, templateId, domainMatched, durationMs, timestamp }, schemaValidation?, provenance?, snapshotRecorded?, snapshotCheck? }`. Registered-template successes include a signed `provenance` receipt binding the data hash, template source hash, target URL, run time, and schema validation state. `schemaValidation` is present only when the template declares `outputSchema`, and contains `{ valid, errors? }`; snapshot fields are present only for the selected mode. Golden files are stored locally under `templates/snapshots/`.
 Registered-template runs automatically append a row to `templates/extraction_metrics.csv` (see `get_extraction_stats` below) — no separate step required; dry-runs persist neither metrics nor any other storage state.
 
 If the resolved template was registered as an **action-sequence** (via the recorder
@@ -469,6 +469,15 @@ extension's `/api/recordings` endpoint, not `register_extraction_template`), thi
 replays the recorded click/fill/select/navigate steps headlessly instead of running a
 `page.evaluate()` script — `data` is just `{ completedSteps }` rather than scraped
 content. See "Recorder extension" above.
+
+### `get_provenance_public_key`
+
+No input. Returns the persisted Ed25519 public key as `{ keyId, publicKey, algo: "ed25519" }`.
+It never returns private-key material.
+
+### `verify_provenance_receipt`
+
+Accepts `{ receipt }`, where `receipt` is the `provenance` object returned by a registered extraction. Returns `{ valid, reasons? }`; use it to reject a receipt altered after extraction.
 
 ### `synthesize_schema`
 
