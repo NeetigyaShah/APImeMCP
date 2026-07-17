@@ -10,14 +10,14 @@
     "S6": "Done",
     "S7": "Done",
     "S8": "Done",
-    "S9": "Blocked",
+    "S9": "Done",
     "S10": "Done",
     "S11": "Done"
   },
-  "overall": "Blocked",
-  "currentGate": "G3",
-  "blockedBy": "G3:git-diff--check-c949407..HEAD-and-git-diff--unified=0-c949407..HEAD--src/index.ts;ADR-02/F07-3-violation:index.ts-has-two-import-edits-plus-pipelineDeps-and-three-register-calls-not-exactly-three-appended-lines.",
+  "overall": "Done",
+  "currentGate": "G7",
+  "blockedBy": null,
   "owner": null,
   "reviewer": "codex-f07-gate-reviewer",
-  "updatedAt": "2026-07-17T12:33:00.826Z"
+  "updatedAt": "2026-07-17T12:50:53.633Z"
 }

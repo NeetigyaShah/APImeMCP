@@ -8,6 +8,7 @@ import { recordMeasure } from './metrics.js';
 import { PipelineDefSchema } from './types.js';
 import type { MeasureRecord, PipelineDef, PipelineRunResult, PipelineStepResult } from './types.js';
 import type { ExtractionRunner } from './tools/tool-deps.js';
+import type { ToolDeps } from './tools/tool-deps.js';
 
 const pipelineIdPattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -103,6 +104,18 @@ export interface PipelineDeps {
   recordMeasure?: (measure: MeasureRecord) => void | Promise<void>;
 }
 
+type PipelineToolDeps = Pick<ToolDeps, 'extraction'>;
+
+function createPipelineDeps(deps: PipelineToolDeps): PipelineDeps {
+  return {
+    runExtraction: deps.extraction.run,
+    registerPipeline,
+    findPipelineById,
+    listPipelineDefs,
+    recordMeasure,
+  };
+}
+
 export async function runPipeline(
   pipelineId: string,
   initialInput: Record<string, unknown> = {},
@@ -165,10 +178,10 @@ const RegisterPipelineShape = {
   steps: z.array(PipelineDefSchema.shape.steps.element).min(1),
 };
 
-export function registerRegisterPipelineTool(server: McpServer, deps: PipelineDeps): void {
+export function registerRegisterPipelineTool(server: McpServer, deps: PipelineToolDeps): void {
   server.tool('register_pipeline', RegisterPipelineShape, async (input) => {
     try {
-      await deps.registerPipeline({ id: input.pipelineId, name: input.name, description: input.description, steps: input.steps });
+      await registerPipeline({ id: input.pipelineId, name: input.name, description: input.description, steps: input.steps });
       return { content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, pipelineId: input.pipelineId }) }] };
     } catch (error) {
       return { content: [{ type: 'text' as const, text: JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }) }], isError: true };
@@ -176,10 +189,10 @@ export function registerRegisterPipelineTool(server: McpServer, deps: PipelineDe
   });
 }
 
-export function registerRunPipelineTool(server: McpServer, deps: PipelineDeps): void {
+export function registerRunPipelineTool(server: McpServer, deps: PipelineToolDeps): void {
   server.tool('run_pipeline', { pipelineId: z.string().regex(pipelineIdPattern), initialInput: z.record(z.unknown()).optional() }, async (input) => {
     try {
-      const result = await runPipeline(input.pipelineId, input.initialInput ?? {}, deps);
+      const result = await runPipeline(input.pipelineId, input.initialInput ?? {}, createPipelineDeps(deps));
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], isError: !result.success };
     } catch (error) {
       return { content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: error instanceof Error ? error.message : String(error) }) }], isError: true };
@@ -187,8 +200,8 @@ export function registerRunPipelineTool(server: McpServer, deps: PipelineDeps): 
   });
 }
 
-export function registerListPipelinesTool(server: McpServer, deps: PipelineDeps): void {
+export function registerListPipelinesTool(server: McpServer, _deps: PipelineToolDeps): void {
   server.tool('list_pipelines', {}, async () => ({
-    content: [{ type: 'text' as const, text: JSON.stringify({ pipelines: deps.listPipelineDefs().map((pipeline) => ({ id: pipeline.id, name: pipeline.name, ...(pipeline.description ? { description: pipeline.description } : {}), stepCount: pipeline.steps.length })) }, null, 2) }],
+    content: [{ type: 'text' as const, text: JSON.stringify({ pipelines: listPipelineDefs().map((pipeline) => ({ id: pipeline.id, name: pipeline.name, ...(pipeline.description ? { description: pipeline.description } : {}), stepCount: pipeline.steps.length })) }, null, 2) }],
   }));
 }
