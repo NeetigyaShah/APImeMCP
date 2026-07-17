@@ -128,3 +128,16 @@ export function checkDrift(templateId: string, schema: Record<string, any>, samp
   const entries = diffAgainstSchema(schema, sample);
   return { templateId, timestamp: new Date().toISOString(), hasDrift: entries.length > 0, entries };
 }
+
+export interface DiffResult {
+  changed: boolean;
+  summary: string;
+  entries?: DriftEntry[];
+}
+
+export function diffContent(before: unknown, after: unknown): DiffResult {
+  const entries = diffJson(before, after);
+  const changed = entries.length > 0;
+  const summary = changed ? `${entries.length} change(s) detected` : 'no changes';
+  return { changed, summary, entries };
+}

@@ -305,3 +305,40 @@ export interface TemplateSla {
   lastDriftAt?: string;
   driftEntries: DriftEntry[];
 }
+
+// F20: Change-monitoring mesh
+export interface MonitorSubscription {
+  id: string;
+  templateId: string;
+  targetUrl?: string;
+  inputs?: Record<string, unknown>;
+  cronExpression: string;
+  notifyEndpointUrl: string;
+  active: boolean;
+  createdAt: string;
+  lastRunAt?: string;
+  lastResultHash?: string;
+  lastResult?: unknown;
+  lastChange?: { at: string; summary: string };
+}
+
+export interface MonitorEvent {
+  monitorId: string;
+  templateId: string;
+  changed: boolean;
+  summary: string;
+  before?: unknown;
+  after?: unknown;
+  at: string;
+}
+
+export const SubscribeMonitorShape = {
+  templateId: TemplateIdSchema,
+  targetUrl: z.string().url().optional(),
+  inputs: z.record(z.unknown()).optional(),
+  cronExpression: z.string().min(1, 'cronExpression must not be empty'),
+  notifyEndpointUrl: z.string().refine(isHttpUrl, { message: 'notifyEndpointUrl must be an absolute http:// or https:// URL' }),
+};
+
+export const SubscribeMonitorInputSchema = z.object(SubscribeMonitorShape);
+export type SubscribeMonitorInput = z.infer<typeof SubscribeMonitorInputSchema>;

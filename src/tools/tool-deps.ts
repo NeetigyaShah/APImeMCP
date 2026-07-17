@@ -1,4 +1,4 @@
-import type { RegisterExtractionTemplateInput, ManifestEntry } from '../types.js';
+import type { RegisterExtractionTemplateInput, ManifestEntry, MonitorSubscription } from '../types.js';
 import type { SnapshotExtractionResult } from './extraction-runner.js';
 import type { AppConnection, ConnectAppInput } from '../types.js';
 import type { ScheduledJob } from '../scheduler.js';
@@ -31,7 +31,12 @@ export interface ToolDeps {
   extraction: { run: ExtractionRunner };
   templates: { register: (input: RegisterExtractionTemplateInput) => Promise<ManifestEntry> };
   cookies: { save: (templateId: string, cookieString: string) => Promise<void> };
-  scheduler: { register: (targetUrl: string, cronExpression: string, templateId?: string) => Promise<ScheduledJob> };
+  scheduler: {
+    register: (targetUrl: string, cronExpression: string, templateId?: string) => Promise<ScheduledJob>;
+    subscribeMonitor: (input: Omit<MonitorSubscription, 'id' | 'active' | 'createdAt' | 'lastRunAt' | 'lastResultHash' | 'lastResult' | 'lastChange'>) => Promise<MonitorSubscription>;
+    cancelMonitor: (id: string) => Promise<boolean>;
+    listMonitors: () => MonitorSubscription[];
+  };
   metrics: { getStats: () => Promise<unknown> };
   notifications: { send: (endpointUrl: string, message: string) => Promise<void> };
   downloads: { batch: (urls: string[], outputDir: string, onProgress: (current: number, total: number) => void) => Promise<Array<{ success: boolean }>> };
