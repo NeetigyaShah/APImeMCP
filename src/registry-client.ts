@@ -81,6 +81,7 @@ export async function registerRegistryEntry(entry: ManifestEntry): Promise<AddFr
         fixedTargetUrl: entry.fixedTargetUrl,
         waitStrategy: entry.waitStrategy,
         readySelector: entry.readySelector,
+        outputSchema: entry.outputSchema,
         source: 'registry',
         contributedBy: entry.contributedBy,
       });

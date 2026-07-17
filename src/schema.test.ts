@@ -18,6 +18,12 @@ describe('validateOutput', () => {
     expect(validateOutput({ title: 'Example' }, schema)).toEqual({ valid: true });
   });
 
+  it('validates independently with reloaded schema objects', () => {
+    const reloadedSchema = JSON.parse(JSON.stringify(schema));
+
+    expect(validateOutput({ title: 'Example' }, reloadedSchema)).toEqual({ valid: true });
+  });
+
   it('reports human-readable errors for a value that violates the schema', () => {
     const result = validateOutput({ title: 42 }, schema);
 

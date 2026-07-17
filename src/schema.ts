@@ -5,8 +5,6 @@ export interface ValidationResult {
   errors?: string[];
 }
 
-const ajv = new Ajv({ allErrors: true, strict: false });
-
 export function validateOutput(
   value: unknown,
   schema: Record<string, unknown> | undefined,
@@ -14,6 +12,7 @@ export function validateOutput(
   if (!schema) return { valid: true };
 
   try {
+    const ajv = new Ajv({ allErrors: true, strict: false });
     const validate = ajv.compile(schema);
     if (validate(value)) return { valid: true };
 
