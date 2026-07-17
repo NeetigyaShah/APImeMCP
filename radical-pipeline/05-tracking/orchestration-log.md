@@ -33,6 +33,8 @@
 - F14's first repair still omitted unmatched-domain and no-input measures because their empty template IDs were invalid under the measure schema. Its second repair uses schema-valid synthetic IDs and awaits its final integration gate.
 - F19 G2 rejected `c81d721`: wildcard allowlists were not fail-closed, the lint workflow could no-op, the full suite had a malformed-test syntax error, and the nightly token was job-wide during untrusted template execution. A fresh security repair is in progress.
 - F01 integrated at `7b3d19f` with build and all F01/F03/F05 verifiers passing. Its root `npm test` was polluted by an unmerged F19 worktree test. The test command now excludes `.claude/worktrees/**`, preserving isolation between parallel feature branches and integration gates.
+- F14 integrated at `e2065bc` after its repaired pre-execution measurements passed independent review and root build/test/F01/F14 verification.
+- F19 final review rejected `fe5f0a4`: its workflow lints the registry default branch rather than incoming PR inputs (and would fail against the current legacy manifest), while `verify-F19` bypasses the shipped registry driver and its own fixtures/CLI/lint path. A fresh focused repair is required.
 
 ## Agent Failures
 
