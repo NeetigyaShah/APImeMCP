@@ -110,3 +110,16 @@
 - Per-user isolation: N/A in the meaningful sense here — the signing keypair is one server-wide key (not user-scoped data) and receipts contain no cross-user state (no cookies, no other user's results); nothing in this diff introduces shared mutable state across users.
 - F04 self-heal auto-merge check: not applicable, this is F11.
 - Verdict: **G4 PASS, no findings.** `status/F11.json` updated: `reviewer security-reviewer-g4-f11`; left `currentGate: G3` (unchanged) since the Architect's G3 Arch pass on the `types.ts` boundary touch is still outstanding and gates are ordered G3 before G4 — recording `currentGate` past G3 without that review actually having happened would misstate the pipeline state. Not merged; worktree left untouched for the G3 Arch reviewer.
+
+## 2026-07-17 - F12 Policy Engine Implementation
+
+- F12 builder implemented policy engine for extraction rules with no external dependencies
+- Created src/policy.ts module with rate limiting (templateId-based, configurable 3000ms default), robots.txt compliance (RFC 9309 style, fail-closed), and ToS domain restrictions
+- Modified engine.ts to add templateId parameter and call enforcePolicy before page navigation
+- Updated extraction-runner.ts to pass templateId through ExecuteExtractionOptions
+- Wrote 26 comprehensive unit tests in src/policy.test.ts covering rate limiting, robots.txt parsing, ToS blocking, config overrides, and error handling
+- Created verify-F12.mjs script for live verification with local fixture server (robots.txt, allowed/blocked paths, rate limit recovery)
+- Build clean: npm run build passes
+- Tests green: npm test passes 137 tests (26 new F12 tests all passing)
+- Commit: a52c931 on integration branch
+- Status: G1 Build passes, ready for G2 Code-Review
