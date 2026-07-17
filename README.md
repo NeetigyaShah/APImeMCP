@@ -575,6 +575,13 @@ never returns cookie values or credential fields; the persistent Chromium profil
 directory is the browser-identity boundary and encrypted secrets belong to the
 separate vault surface.
 
+### `register_pipeline`, `run_pipeline`, and `list_pipelines`
+
+Pipelines chain registered templates sequentially. Register with `pipelineId`,
+`name`, and `steps`; map values with `$init.path` or `stepId.path`. Run with an
+optional `initialInput`; failures stop the pipeline and are returned with the
+ordered step results. Listing returns each pipeline's step count.
+
 ## Prompts
 
 ### `get_environment_context`

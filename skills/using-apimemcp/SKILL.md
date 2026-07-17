@@ -77,6 +77,10 @@ apply the same judgment here you'd apply to writing that code by hand.
 | `get_extraction_stats` | none | Totals, recent domains, last run — read this instead of re-deriving from raw files. |
 | `send_notification` | `endpointUrl`, `message` | Generic webhook POST. |
 
+| `register_pipeline` | `pipelineId`, `name`, `description?`, `steps` | Saves a sequential chain of registered templates; map fields with `$init.path` or `stepId.path`. |
+| `run_pipeline` | `pipelineId`, `initialInput?` | Runs the chain fail-fast and returns ordered step results plus pipeline metrics. |
+| `list_pipelines` | none | Lists registered pipelines and step counts. |
+
 Action-sequence templates are **created by the recorder extension** (it POSTs recorded
 steps + cookies to `/api/recordings`), not by a tool — there's no "register workflow"
 tool. You run them via `execute_native_extraction`.
