@@ -1,268 +1,157 @@
 #!/usr/bin/env node
-
-import { spawn } from 'child_process';
-import { promises as fs } from 'fs';
-import path from 'path';
-import http from 'http';
-import { fileURLToPath } from 'url';
-import { randomUUID } from 'crypto';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+import { promises as fs } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
+const serverEntry = path.resolve(projectRoot, 'dist/index.js');
+const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'apimemcp-f20-'));
 
-// Helper to start the MCP server process
-async function startMcpServer() {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('node', ['dist/index.js'], {
-      cwd: projectRoot,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-
-    let ready = false;
-    proc.stderr.on('data', (data) => {
-      const output = data.toString();
-      if (output.includes('[APImeMCP]')) {
-        if (!ready) {
-          ready = true;
-          resolve(proc);
-        }
-      }
-    });
-
-    proc.on('error', (error) => {
-      reject(new Error(`Failed to start MCP server: ${error.message}`));
-    });
-
-    setTimeout(() => {
-      if (!ready) {
-        proc.kill();
-        reject(new Error('MCP server did not start in time'));
-      }
-    }, 10000);
-  });
-}
-
-// Create a simple fixture server that serves changing HTML
-async function startFixtureServer() {
-  return new Promise((resolve) => {
-    let tick = 1;
-    const server = http.createServer((req, res) => {
-      if (req.url === '/fixture') {
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        // Serve different content based on tick counter
-        const price = tick === 1 ? '100' : '50';
-        res.end(`
-          <html>
-            <body>
-              <div class="price">${price}</div>
-            </body>
-          </html>
-        `);
-        tick++;
-      } else {
-        res.writeHead(404);
-        res.end('Not found');
-      }
-    });
-
-    server.listen(3001, () => {
-      resolve(server);
-    });
-  });
-}
-
-// Send JSON-RPC request to MCP server via stdio
-async function sendMcpRequest(proc, method, params) {
-  return new Promise((resolve, reject) => {
-    const id = randomUUID();
-    const request = {
-      jsonrpc: '2.0',
-      id,
-      method,
-      params,
-    };
-
-    const responseHandler = (data) => {
-      const output = data.toString();
-      try {
-        // Look for JSON-RPC response
-        const lines = output.split('\n');
-        for (const line of lines) {
-          if (line.trim()) {
-            const parsed = JSON.parse(line);
-            if (parsed.id === id) {
-              proc.stdout.removeListener('data', responseHandler);
-              if (parsed.error) {
-                reject(new Error(`RPC error: ${parsed.error.message}`));
-              } else {
-                resolve(parsed.result);
-              }
-            }
-          }
-        }
-      } catch {
-        // JSON parse error, keep listening
-      }
-    };
-
-    proc.stdout.on('data', responseHandler);
-    proc.stdin.write(JSON.stringify(request) + '\n');
-
-    setTimeout(() => {
-      proc.stdout.removeListener('data', responseHandler);
-      reject(new Error(`RPC timeout for ${method}`));
-    }, 5000);
-  });
-}
-
-// Main test
-async function main() {
-  console.log('=== F20 Change-Monitoring Mesh Verification ===\n');
-
-  let testsPassed = 0;
-  let testsFailed = 0;
-  let mcpProc = null;
-  let fixtureServer = null;
-
-  try {
-    // Build the project first
-    console.log('Building project...');
-    await new Promise((resolve, reject) => {
-      const build = spawn('npm', ['run', 'build'], { cwd: projectRoot, stdio: 'pipe' });
-      build.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`Build failed with code ${code}`));
-      });
-    });
-
-    // Start fixture server
-    console.log('Starting fixture server on port 3001...');
-    fixtureServer = await startFixtureServer();
-    console.log('✓ Fixture server started\n');
-
-    // Start MCP server
-    console.log('Starting MCP server...');
-    mcpProc = await startMcpServer();
-    console.log('✓ MCP server started\n');
-
-    // Test 1: Register a fixture template
-    console.log('Test 1: Register fixture template...');
-    const templateId = `fixture-template-${randomUUID().slice(0, 8)}`;
-    await sendMcpRequest(mcpProc, 'register_extraction_template', {
-      templateId,
-      domainPattern: 'localhost',
-      executableScript: `
-        const priceEl = document.querySelector('.price');
-        return {
-          price: parseInt(priceEl?.textContent || '0', 10),
-          timestamp: new Date().toISOString()
-        };
-      `,
-      fixedTargetUrl: 'http://localhost:3001/fixture',
-    });
-    console.log(`✓ Template registered: ${templateId}\n`);
-    testsPassed++;
-
-    // Test 2: Subscribe to monitor
-    console.log('Test 2: Subscribe to monitor...');
-    let monitorId = null;
-    let notificationReceived = false;
-    let notificationContent = null;
-
-    // Set up webhook listener for notifications
-    const webhookServer = http.createServer((req, res) => {
-      if (req.method === 'POST') {
-        let body = '';
-        req.on('data', (chunk) => {
-          body += chunk.toString();
-        });
-        req.on('end', () => {
-          try {
-            notificationContent = JSON.parse(body);
-            notificationReceived = true;
-            res.writeHead(200);
-            res.end('OK');
-          } catch {
-            res.writeHead(400);
-            res.end('Bad JSON');
-          }
-        });
-      } else {
-        res.writeHead(404);
-        res.end('Not found');
-      }
-    });
-
-    await new Promise((resolve) => {
-      webhookServer.listen(3002, resolve);
-    });
-
-    const subscribeResult = await sendMcpRequest(mcpProc, 'subscribe_monitor', {
-      templateId,
-      cronExpression: '* * * * *', // Every minute (used for manual tick in test)
-      notifyEndpointUrl: 'http://localhost:3002/webhook',
-    });
-
-    monitorId = subscribeResult.monitorId;
-    console.log(`✓ Monitor subscribed: ${monitorId}\n`);
-    testsPassed++;
-
-    // Test 3: List monitors
-    console.log('Test 3: List monitors...');
-    const listResult = await sendMcpRequest(mcpProc, 'list_monitors', {});
-    if (listResult.monitors && listResult.monitors.length > 0 && listResult.monitors[0].id === monitorId) {
-      console.log(`✓ Monitor listed in list_monitors\n`);
-      testsPassed++;
-    } else {
-      console.log('✗ Monitor not found in list\n');
-      testsFailed++;
-    }
-
-    // Test 4: Force two ticks and verify change detection
-    console.log('Test 4: Force ticks and verify change detection...');
-    // Note: In a real scenario, ticks happen via cron. For testing, we'd need
-    // to either wait for the cron to execute or access internal scheduler.
-    // For now, verify the infrastructure is in place.
-    console.log('✓ Monitor is scheduled to run automatically\n');
-    testsPassed++;
-
-    // Test 5: Unsubscribe monitor
-    console.log('Test 5: Unsubscribe monitor...');
-    const unsubResult = await sendMcpRequest(mcpProc, 'unsubscribe_monitor', {
-      monitorId,
-    });
-    if (unsubResult.ok) {
-      console.log(`✓ Monitor unsubscribed\n`);
-      testsPassed++;
-    } else {
-      console.log('✗ Unsubscribe failed\n');
-      testsFailed++;
-    }
-
-    console.log('=== Verification Complete ===');
-    console.log(`Tests passed: ${testsPassed}`);
-    console.log(`Tests failed: ${testsFailed}`);
-
-    if (testsFailed > 0) {
-      process.exit(1);
-    }
-
-    console.log('\n✓ F20 verification successful');
-    process.exit(0);
-  } catch (error) {
-    console.error('Verification error:', error instanceof Error ? error.message : String(error));
-    testsFailed++;
-    console.log(`\nTests passed: ${testsPassed}`);
-    console.log(`Tests failed: ${testsFailed}`);
-    process.exit(1);
-  } finally {
-    if (mcpProc) {
-      mcpProc.kill();
-    }
-    if (fixtureServer) {
-      fixtureServer.close();
-    }
+// Fixture: price changes on every GET so the first cron tick establishes a baseline
+// and the second tick observes a real, detectable change.
+let tick = 0;
+const fixtureServer = http.createServer((req, res) => {
+  if (req.url === '/fixture') {
+    tick++;
+    const price = tick === 1 ? '100' : '50';
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end(`<html><body><div class="price">${price}</div></body></html>`);
+  } else {
+    res.writeHead(404).end('Not found');
   }
+});
+await new Promise((resolve, reject) => {
+  fixtureServer.once('error', reject);
+  fixtureServer.listen(0, '127.0.0.1', resolve);
+});
+const fixtureAddr = fixtureServer.address();
+const fixtureUrl = `http://127.0.0.1:${fixtureAddr.port}/fixture`;
+
+// Webhook: records every notification the monitor fires.
+const notifications = [];
+const webhookServer = http.createServer((req, res) => {
+  if (req.method !== 'POST') return res.writeHead(404).end('Not found');
+  let body = '';
+  req.on('data', (chunk) => { body += chunk; });
+  req.on('end', () => {
+    try {
+      notifications.push(JSON.parse(body));
+      res.writeHead(200).end('OK');
+    } catch {
+      res.writeHead(400).end('Bad JSON');
+    }
+  });
+});
+await new Promise((resolve, reject) => {
+  webhookServer.once('error', reject);
+  webhookServer.listen(0, '127.0.0.1', resolve);
+});
+const webhookAddr = webhookServer.address();
+const webhookUrl = `http://127.0.0.1:${webhookAddr.port}/webhook`;
+
+const client = new Client({ name: 'f20-verify-client', version: '1.0.0' });
+const transport = new StdioClientTransport({
+  command: process.execPath,
+  args: [serverEntry],
+  cwd: tempDir,
+  stderr: 'inherit',
+});
+
+function callTool(name, args) {
+  return client.callTool({ name, arguments: args }, undefined, { timeout: 30_000 });
 }
 
-main();
+function parseResult(result) {
+  const text = result.content?.[0]?.text ?? '';
+  if (result.isError) throw new Error(`Tool call failed: ${text}`);
+  return JSON.parse(text);
+}
+
+let monitorId;
+try {
+  await client.connect(transport);
+
+  console.log('Test 1: Register fixture template');
+  const templateId = `f20-fixture-${randomUUID().slice(0, 8)}`;
+  await callTool('register_extraction_template', {
+    templateId,
+    domainPattern: '127.0.0.1',
+    executableScript: `
+      (() => {
+        const priceEl = document.querySelector('.price');
+        return { price: parseInt(priceEl?.textContent || '0', 10) };
+      })()
+    `,
+    fixedTargetUrl: fixtureUrl,
+  });
+  console.log(`  registered ${templateId}`);
+
+  console.log('Test 2: Subscribe to monitor');
+  const subscribeResult = parseResult(await callTool('subscribe_monitor', {
+    templateId,
+    cronExpression: '* * * * *',
+    notifyEndpointUrl: webhookUrl,
+  }));
+  monitorId = subscribeResult.monitorId;
+  if (!monitorId) throw new Error(`subscribe_monitor did not return a monitorId: ${JSON.stringify(subscribeResult)}`);
+  console.log(`  subscribed ${monitorId}`);
+
+  console.log('Test 3: List monitors');
+  const listResult = parseResult(await callTool('list_monitors', {}));
+  if (!listResult.monitors?.some((m) => m.id === monitorId)) {
+    throw new Error(`Monitor ${monitorId} not found in list_monitors: ${JSON.stringify(listResult)}`);
+  }
+  console.log('  monitor listed');
+
+  console.log('Test 4: Wait for two real cron ticks and verify change-detection notify');
+  // Minimum cron granularity is 1 minute (ScheduleStockCheckShape enforces 5-field,
+  // no-seconds cron) -- there is no tool to force a tick, so this genuinely waits for
+  // the real schedule. First tick establishes the baseline (price=100, no notify
+  // expected on first successful run); second tick observes price=50 and must notify
+  // exactly once with real diff content.
+  const deadline = Date.now() + 150_000;
+  while (notifications.length === 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  if (notifications.length === 0) {
+    throw new Error('No notification received within 150s across two real cron ticks -- change-monitoring is not firing');
+  }
+  if (notifications.length > 1) {
+    throw new Error(`Expected exactly one change notification, got ${notifications.length}: ${JSON.stringify(notifications)}`);
+  }
+  // notifyChange() (src/notifier.ts) wraps the monitor event: { event, message, timestamp }.
+  const notification = notifications[0];
+  const event = notification?.event;
+  if (!event || event.monitorId !== monitorId || event.templateId !== templateId || !event.changed) {
+    throw new Error(`Notification payload missing/wrong shape: ${JSON.stringify(notification)}`);
+  }
+  if (event.after?.data?.price !== 50 || event.before?.data?.price !== 100) {
+    throw new Error(`Notification before/after don't reflect the real fixture price change: ${JSON.stringify(notification)}`);
+  }
+  console.log(`  received notification: ${JSON.stringify(notification)}`);
+
+  console.log('Test 5: Unsubscribe monitor');
+  const unsubResult = parseResult(await callTool('unsubscribe_monitor', { monitorId }));
+  if (!unsubResult.ok) throw new Error(`Unsubscribe failed: ${JSON.stringify(unsubResult)}`);
+  console.log('  unsubscribed');
+
+  console.log('\nPASS F20 change-monitoring mesh: register, subscribe, list, real tick-driven notify, unsubscribe all verified live');
+  process.exitCode = 0;
+} catch (error) {
+  console.log(`FAIL ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 1;
+} finally {
+  if (monitorId) {
+    await callTool('unsubscribe_monitor', { monitorId }).catch(() => undefined);
+  }
+  await client.close().catch(() => undefined);
+  await new Promise((resolve) => fixtureServer.close(resolve));
+  await new Promise((resolve) => webhookServer.close(resolve));
+  await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }).catch(() => undefined);
+}

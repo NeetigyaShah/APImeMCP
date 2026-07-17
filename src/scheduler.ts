@@ -179,23 +179,24 @@ export class Scheduler {
           return;
         }
 
-        // Hash differs - run diff and notify if changed
+        // The hash comparison above already proved the result changed (that's the whole
+        // reason we're in this branch). deps.diff (F02's diffJson) only detects
+        // schema-shape drift -- field added/removed/type-changed -- never a same-shape
+        // scalar value change (price 100 -> 50 produces zero entries by design), so it
+        // cannot gate notify here; it only enriches the notification with entries when
+        // it has something structural to say.
         const diffResult = deps.diff(monitor.lastResult, result);
-        if (diffResult.changed) {
-          await deps.notify(monitor.notifyEndpointUrl, {
-            monitorId: monitor.id,
-            templateId: monitor.templateId,
-            changed: true,
-            summary: diffResult.summary,
-            before: monitor.lastResult,
-            after: result,
-            at: new Date().toISOString(),
-          });
-          monitor.lastChange = {
-            at: new Date().toISOString(),
-            summary: diffResult.summary,
-          };
-        }
+        const summary = diffResult.changed ? diffResult.summary : 'result value changed';
+        await deps.notify(monitor.notifyEndpointUrl, {
+          monitorId: monitor.id,
+          templateId: monitor.templateId,
+          changed: true,
+          summary,
+          before: monitor.lastResult,
+          after: result,
+          at: new Date().toISOString(),
+        });
+        monitor.lastChange = { at: new Date().toISOString(), summary };
 
         monitor.lastResultHash = resultHash;
         monitor.lastResult = result;

@@ -83,7 +83,7 @@ const scheduler = new Scheduler(async (targetUrl, templateId) => {
 // Initialize monitor dependencies for scheduler
 scheduler.setMonitorDeps({
   runExtraction: async (targetUrl, templateId) => {
-    return runExtraction(targetUrl, templateId);
+    return runExtraction(targetUrl, templateId, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'off', true);
   },
   diff: diffContent,
   notify: notifyChange,
