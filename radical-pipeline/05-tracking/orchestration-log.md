@@ -57,3 +57,20 @@
 - Future agents receive explicit worktree ownership, narrowed deliverables, and time-bounded handoffs. Any failure is added here and reported in chat immediately.
 - F01 and F05 are blocked by recorded G2 defects, not by infrastructure. Their original reviewer agents returned explicit rejection verdicts and will be replaced by fresh repair builders.
 - F22 could not start because the agent-runtime concurrency cap was occupied. The orchestrator is reclaiming completed agents before retrying it.
+`n## 2026-07-17 — Wave 3 launch recovery
+- Wave 3 initial six-builder launch was rejected before agents started because gpt-5.5 does not support the requested max effort. Retried with supported xhigh for F04/F06.
+- The retry then failed before any builder started because the shared agent-thread ceiling was reached. Attempted stale-agent cleanup but its recorded ID was already absent. No source or tracker files changed.
+- F04 single-builder retry was also rejected by the shared agent-thread ceiling; no builder or source change was created.
+- F08 builder 019f6fef-a840-7210-b8d2-7f8dbf3d0da4 completed only tracker initialization (commit 6699941) and implemented no feature. Handoff rejected; fresh builder required.
+- F11 builder from the partial Wave 3 launch exceeded the setup recovery window with no substantive feature change; only line-ending/skill churn appeared. Worktree quarantined; fresh builder required after its slot releases.
+- F15 builder from the partial Wave 3 launch exceeded the setup recovery window with no substantive feature change; only line-ending/skill churn appeared. Worktree quarantined; fresh builder required after its slot releases.
+- F08 reviewer 019f7004-5f1c-77f1-8ece-5652407f5170 returned a checkpoint with G1 still pending and executed no required gates. Handoff rejected; fresh reviewer required. No source finding was produced.
+- F07 G3 failed on reviewer 019f700a-03c2-7663-a1d1-46c582af6682: ADR-02/F07 §3 violation in src/index.ts (two import edits, pipelineDeps, and three registrations rather than the allowed three appended registration lines). G1/G2 passed; G6 correctly skipped. Fresh repair builder required.
+- F08 G2 failed on reviewer 019f7009-d11f-7802-8af4-2756d6516b0a: src/usage.ts emits a non-async page.evaluate callback containing await, making generated standalone apis/<id>.mjs scripts invalid. G1/G3/G6 passed. Fresh repair builder required.
+- F04 reviewer 019f700b-5d2d-7d22-8ae8-0f9afa31d487 stalled without gate evidence after recovery directives; closed and requires a fresh reviewer.
+- F06 reviewer 019f7010-a274-78d0-babe-b3fa3c1b5681 stalled without gate evidence after recovery directives; closed and requires a fresh reviewer.
+- F07 repair builder 019f7011-977f-7f61-847b-0474f67b9029 stalled without implementing the recorded ADR-02 repair; closed and requires a fresh builder.
+- F08 repair builder 019f7012-7d0e-79d0-817d-2ec899e40a4c stalled without implementing the recorded standalone-export repair; closed and requires a fresh builder.
+- F04 G1/G4/G6 failed on reviewer 019f7017-b66a-7ef0-830e-1b8fb6de2aae: registry-client.ts:159 passes raw Windows local paths to git clone (tests and verify-F04 fail), and self-heal.ts:189/191 serializes full dry-run output into PR body. Fresh security repair builder required.
+- F06 G2/G3/G4 failed on reviewer 019f7017-e940-7821-975a-6558cb51df1e: synthesize-schema.ts:124 drops recording.outputSchema; registry-client.ts:193 commits only manifest with no generated script; engine.ts:66 embeds fill values while guard checks only selector/label hints. Fresh security repair builder required.
+- F07 G3 re-review failed on reviewer 019f7021-f858-7a63-b1ae-6e320e01bf89: src/pipeline.ts:181 hides collaborators through module imports instead of ADR-02 explicit dependency injection. G1/G6 passed; fresh repair builder required.
