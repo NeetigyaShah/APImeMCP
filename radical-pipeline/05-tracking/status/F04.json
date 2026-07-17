@@ -15,9 +15,9 @@
     "S11": "In-Review"
   },
   "overall": "In-Progress",
-  "currentGate": "G1",
+  "currentGate": "G5",
   "blockedBy": null,
   "owner": "codex",
-  "reviewer": null,
-  "updatedAt": "2026-07-17T13:16:33.184Z"
+  "reviewer": "claude-f04-g4-security-reviewer",
+  "updatedAt": "2026-07-17T14:00:32.944Z"
 }
