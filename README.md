@@ -352,10 +352,10 @@ PR) and register it locally.
 | `domain` | string | e.g. `amazon.com` — matched against the registry's templates by domain, longest-pattern-wins |
 
 Registry templates are marked `source: 'registry'` in your local manifest and run with a
-**network allowlist enforced by default** (only the template's own domain, plus a small
-curated CDN/asset allowlist) — a community template can't exfiltrate scraped data or ride
-your session to an arbitrary endpoint. Locally-authored templates are untouched by this —
-trusted by definition, same as always. Same functionality is available from the shell
+**declared network allowlist enforced by default**. New registry contributions are linted
+in CI for a non-empty declaration and unsafe script patterns; nightly verification also
+reports any observed request outside that declaration. Locally-authored templates are
+untouched by this — trusted by definition, same as always. Same functionality is available from the shell
 without an MCP client: `apimemcp add <domain>` (no browser/dashboard startup, just a
 fetch + local registration).
 

@@ -50,7 +50,7 @@ export async function registerTemplate(
   // shape the public register_extraction_template MCP tool uses) - only registry-client.ts
   // calls this function directly in TS with them set, so a template can't self-declare
   // 'local' to escape the registry sandbox (see types.ts's ManifestEntry.source comment).
-  input: RegisterExtractionTemplateInput & { source?: 'registry' | 'local'; contributedBy?: string }
+  input: RegisterExtractionTemplateInput & { source?: 'registry' | 'local'; contributedBy?: string; allowedDomains?: string[] }
 ): Promise<ManifestEntry> {
   return withLock(async () => {
     const manifest = await loadManifest();
@@ -71,6 +71,7 @@ export async function registerTemplate(
       ...(input.readySelector ? { readySelector: input.readySelector } : {}),
       ...(input.source ? { source: input.source } : {}),
       ...(input.contributedBy ? { contributedBy: input.contributedBy } : {}),
+      ...(input.allowedDomains ? { allowedDomains: input.allowedDomains } : {}),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
@@ -86,6 +87,7 @@ export async function registerActionSequenceTemplate(input: {
   sequence: ActionSequence;
   source?: 'registry' | 'local';
   contributedBy?: string;
+  allowedDomains?: string[];
 }): Promise<ManifestEntry> {
   return withLock(async () => {
     const manifest = await loadManifest();
@@ -106,6 +108,7 @@ export async function registerActionSequenceTemplate(input: {
       kind: 'action-sequence',
       ...(input.source ? { source: input.source } : {}),
       ...(input.contributedBy ? { contributedBy: input.contributedBy } : {}),
+      ...(input.allowedDomains ? { allowedDomains: input.allowedDomains } : {}),
     };
     manifest[input.templateId] = entry;
     await saveManifest(manifest);

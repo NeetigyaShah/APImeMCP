@@ -70,6 +70,7 @@ apply the same judgment here you'd apply to writing that code by hand.
 | `list_app_connections` | none | Lists profile IDs, domain scopes, startup behavior, and confirmation status without returning cookie values. |
 | `save_template_cookies` | `templateId`, `cookieString` | Persist session cookies for a template **without running it** — use this when the user mentions/shares cookies in chat so they land in the dashboard. |
 | `add_community_template` | `domain` | Pulls a pre-verified template from the public [apimemcp-templates](https://github.com/NeetigyaShah/APImeMCP-Templates) registry (a plain git repo, no server) and registers it locally — check this **before** writing a new template by hand for a well-known site; someone may have already contributed one. Registry templates run with a network allowlist (own domain + a small CDN allowlist) enforced automatically. |
+| `registry CI` | `apimemcp add <domain>` | The CLI uses the same community-template path as MCP. Registry contributions require a declared network allowlist, are linted in CI, and have live network behavior checked nightly. |
 | `batch_download_assets` | `urls: string[]`, `outputDir` | Concurrency-limited (5 at a time). Use for "download the images" rather than a hand-rolled fetch loop. |
 | `schedule_stock_check` | `targetUrl`, `cronExpression` (5-field only), `templateId?` | Persists across restarts. |
 | `get_extraction_stats` | none | Totals, recent domains, last run — read this instead of re-deriving from raw files. |

@@ -13,6 +13,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run build
+      - run: node scripts/lint-templates.mjs
       - run: npm test
       - run: node scripts/verify-F00.mjs
       - run: node scripts/verify-engine.mjs

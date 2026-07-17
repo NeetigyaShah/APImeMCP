@@ -8,6 +8,7 @@ import { ensureStorageInitialized, findTemplateById, findTemplateByUrl, loadMani
 import { closeBrowser, confirmOpenAppConnection, createSuccessfulExtractionResult, executeActionSequence, executeExtraction, executeMeasured, initBrowser, isBrowserReady, openAppConnection, REGISTRY_CDN_ALLOWLIST, renderPage, startConfiguredAppConnections } from './engine.js';
 import { getSavedCookies, saveCookies } from './cookie-store.js';
 import { addFromRegistry } from './registry-client.js';
+import { addCommunityTemplateCore } from './tools/add-community-template.js';
 import { batchDownload } from './downloader.js';
 import { getAllSla, preExecutionMeasure } from './metrics.js';
 import { sendNotification } from './notifier.js';
@@ -150,7 +151,7 @@ process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
 async function runCliAddCommand(domain: string): Promise<void> {
   await ensureStorageInitialized();
-  const result = await addFromRegistry(domain);
+  const result = await addCommunityTemplateCore({ addFromRegistry }, { domain });
   if (result.registered) {
     console.log(`Registered "${result.templateId}" from the community registry for domain "${domain}".`);
   } else {

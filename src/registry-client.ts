@@ -4,7 +4,7 @@ import { registerTemplate, registerActionSequenceTemplate } from './storage.js';
 // jsDelivr mirrors the registry repo's default branch with CDN caching, for free - no
 // server to run, no publish step beyond merging a PR. See apimemcp-templates' own
 // README for why this is a git repo, not a hosted database.
-const REGISTRY_BASE = 'https://cdn.jsdelivr.net/gh/NeetigyaShah/APImeMCP-Templates@main/registry';
+const REGISTRY_BASE = process.env.APIMEMCP_REGISTRY_BASE ?? 'https://cdn.jsdelivr.net/gh/NeetigyaShah/APImeMCP-Templates@main/registry';
 
 export async function fetchRegistryManifest(): Promise<Manifest> {
   const res = await fetch(`${REGISTRY_BASE}/manifest.json`);
@@ -72,6 +72,7 @@ export async function registerRegistryEntry(entry: ManifestEntry): Promise<AddFr
         sequence: JSON.parse(contents) as ActionSequence,
         source: 'registry',
         contributedBy: entry.contributedBy,
+        allowedDomains: entry.allowedDomains,
       });
     } else {
       await registerTemplate({
@@ -84,6 +85,7 @@ export async function registerRegistryEntry(entry: ManifestEntry): Promise<AddFr
         outputSchema: entry.outputSchema,
         source: 'registry',
         contributedBy: entry.contributedBy,
+        allowedDomains: entry.allowedDomains,
       });
     }
   } catch (err) {

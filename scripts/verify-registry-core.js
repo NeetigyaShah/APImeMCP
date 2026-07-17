@@ -3,7 +3,8 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-/** @typedef {{ templateId: string; ok: boolean; durationMs: number; timestamp: string; error?: string; skipped?: 'no-fixed-target' }} VerificationRecord */
+/** @typedef {{ templateId: string; declaredAllowlist: string[]; observedDomains: string[]; undeclaredDomains: string[]; verdict: 'clean' | 'drift' }} NetworkBehaviorFinding */
+/** @typedef {{ templateId: string; ok: boolean; durationMs: number; timestamp: string; error?: string; skipped?: 'no-fixed-target'; network?: NetworkBehaviorFinding }} VerificationRecord */
 /** @typedef {{ schemaVersion: 1; label: 'apimemcp'; message: 'passing' | 'failing' | 'unverified'; color: 'brightgreen' | 'red' | 'lightgrey' }} ShieldsEndpointBadge */
 
 export function parseArgs(args) {
@@ -39,7 +40,7 @@ export function computeBadge(records) {
   return { schemaVersion: 1, label: 'apimemcp', message: 'unverified', color: 'lightgrey' };
 }
 
-export async function verifyEntries(manifest, { only, concurrency = 4, runEntry }) {
+export async function verifyEntries(manifest, { only, concurrency = 4, runEntry, isDomainAllowed }) {
   const entries = Object.entries(manifest).filter(([templateId]) => !only || templateId === only);
   if (only && entries.length === 0) throw new Error(`Registry template "${only}" was not found`);
   const records = new Array(entries.length);
@@ -54,12 +55,21 @@ export async function verifyEntries(manifest, { only, concurrency = 4, runEntry 
         continue;
       }
       const result = await runEntry(templateId, entry);
+      const observedDomains = [...new Set(result.observedDomains ?? [])].sort();
+      const declaredAllowlist = entry.allowedDomains ?? [];
+      const undeclaredDomains = isDomainAllowed
+        ? observedDomains.filter((domain) => !isDomainAllowed(domain, declaredAllowlist))
+        : [];
+      const network = isDomainAllowed
+        ? { templateId, declaredAllowlist, observedDomains, undeclaredDomains, verdict: undeclaredDomains.length ? 'drift' : 'clean' }
+        : undefined;
       records[index] = {
         templateId,
-        ok: result.success,
+        ok: result.success && network?.verdict !== 'drift',
         durationMs: result.meta.durationMs,
         timestamp: result.meta.timestamp,
         ...(result.error ? { error: result.error } : {}),
+        ...(network ? { network } : {}),
       };
     }
   }
@@ -89,7 +99,7 @@ export async function writeBadgeFiles(records, { out, dryRun, atomicWriteFile, n
 export async function main() {
   const options = parseArgs(process.argv.slice(2));
   const outputDirectory = path.resolve(options.out);
-  const [{ fetchRegistryManifest, listVerifiable, registerRegistryEntry }, { initBrowser, closeBrowser }, { runExtraction }, { ensureStorageInitialized, atomicWriteFile }, { withLock }, { sendNotification }] =
+  const [{ fetchRegistryManifest, listVerifiable, registerRegistryEntry }, { initBrowser, closeBrowser }, { runExtraction }, { ensureStorageInitialized, atomicWriteFile }, { withLock }, { sendNotification }, { isDomainAllowed }] =
     await Promise.all([
       import('../dist/registry-client.js'),
       import('../dist/engine.js'),
@@ -97,6 +107,7 @@ export async function main() {
       import('../dist/storage.js'),
       import('../dist/lock.js'),
       import('../dist/notifier.js'),
+      import('../dist/registry-lint.js'),
     ]);
   const manifest = await fetchRegistryManifest();
   const scratchDir = await fs.mkdtemp(path.join(os.tmpdir(), 'apimemcp-registry-verify-'));
@@ -112,8 +123,17 @@ export async function main() {
     const records = await withLock(() => verifyEntries(manifest, {
       only: options.only,
       concurrency: options.concurrency,
+      isDomainAllowed,
       runEntry: async (templateId, entry) => {
-        return runExtraction(entry.fixedTargetUrl, templateId, undefined, undefined, true);
+        const observedDomains = new Set();
+        const result = await runExtraction(entry.fixedTargetUrl, templateId, undefined, undefined, true, undefined, undefined, undefined, undefined, undefined, (url) => {
+          try {
+            observedDomains.add(new URL(url).hostname.toLowerCase());
+          } catch {
+            // Browser request URLs are expected to be absolute; ignore malformed URLs.
+          }
+        });
+        return { ...result, observedDomains: [...observedDomains] };
       },
     }));
     await writeBadgeFiles(records, {
@@ -124,7 +144,7 @@ export async function main() {
         ? (record, previous, current) => sendNotification(process.env.VERIFY_NOTIFY_URL, `Registry verification changed for ${record.templateId}: ${previous} -> ${current}`)
         : undefined,
     });
-    for (const record of records) console.log(`${record.templateId}: ${computeBadge([record]).message}`);
+    for (const record of records) console.log(`${record.templateId}: ${computeBadge([record]).message}${record.network ? ` (${record.network.verdict})` : ''}`);
   } finally {
     if (process.cwd() === scratchDir) await closeBrowser();
     await fs.rm(scratchDir, { recursive: true, force: true });

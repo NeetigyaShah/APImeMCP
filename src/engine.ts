@@ -297,6 +297,7 @@ export interface ExecuteExtractionOptions {
   // for locally-authored templates, which stay unrestricted (trusted by definition, same
   // as today).
   networkAllowlist?: string[];
+  onNetworkRequest?: (url: string) => void;
 }
 
 export async function executeExtraction(options: ExecuteExtractionOptions): Promise<unknown> {
@@ -341,6 +342,7 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     });
     const page = await context.newPage();
+    page.on('request', (request) => options.onNetworkRequest?.(request.url()));
     try {
       await page.goto(options.targetUrl, {
         timeout: NAVIGATION_TIMEOUT_MS,
@@ -448,6 +450,7 @@ export interface ExecuteActionSequenceOptions {
   headful?: boolean;
   connectionId?: string;
   networkAllowlist?: string[];
+  onNetworkRequest?: (url: string) => void;
 }
 
 export async function executeActionSequence(options: ExecuteActionSequenceOptions): Promise<void> {
@@ -498,6 +501,7 @@ export async function executeActionSequence(options: ExecuteActionSequenceOption
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     });
     const page = await context.newPage();
+    page.on('request', (request) => options.onNetworkRequest?.(request.url()));
     let stepIndex = -1; // -1 = still navigating to startUrl, not yet inside the step loop
     try {
       await page.goto(options.sequence.startUrl, { waitUntil: 'networkidle', timeout: NAVIGATION_TIMEOUT_MS });

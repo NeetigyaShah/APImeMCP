@@ -193,6 +193,10 @@ export interface ManifestEntry {
   // self-host power-user experience.
   source?: 'registry' | 'local';
   contributedBy?: string;
+  // Registry templates declare every hostname their page and script may contact. The
+  // field is optional for backward compatibility with manifests published before F19;
+  // registry CI rejects newly contributed entries without it.
+  allowedDomains?: string[];
 }
 
 export type Manifest = Record<string, ManifestEntry>;

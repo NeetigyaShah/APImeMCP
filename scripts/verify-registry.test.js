@@ -42,4 +42,22 @@ describe('verifyEntries', () => {
       templateId: 'fixed', ok: false, error: 'missing selector', durationMs: 123, timestamp: '2026-07-17T08:00:00.000Z',
     }]);
   });
+
+  it('records request domains outside a declared allowlist as drift', async () => {
+    const records = await verifyEntries({
+      fixed: { templateId: 'fixed', domainPattern: 'example.com', fixedTargetUrl: 'https://example.com', allowedDomains: ['example.com'] },
+    }, {
+      isDomainAllowed: (domain, allowlist) => allowlist.includes(domain),
+      runEntry: async () => ({
+        success: true,
+        observedDomains: ['example.com', 'evil.example'],
+        meta: { durationMs: 1, timestamp: '2026-07-17T08:00:00.000Z' },
+      }),
+    });
+
+    expect(records[0]).toMatchObject({
+      ok: false,
+      network: { verdict: 'drift', observedDomains: ['evil.example', 'example.com'], undeclaredDomains: ['evil.example'] },
+    });
+  });
 });
