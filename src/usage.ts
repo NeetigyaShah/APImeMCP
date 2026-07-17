@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { ManifestEntry, ActionSequence } from './types.js';
+import { evaluateCel } from './cel-eval.js';
 
 const HOST = 'http://127.0.0.1:3000';
 // Kept in lockstep with engine.ts so a standalone script reproduces the server's run.
@@ -56,6 +57,7 @@ const COOKIES = '';
 
 // The extraction script that runs inside the page (verbatim from the template).
 const EXTRACTION_SCRIPT = ${JSON.stringify(scriptSource)};
+const CEL_EVALUATOR_SOURCE = ${JSON.stringify(evaluateCel.toString())};
 
 const browser = await chromium.launch({ headless: true });
 try {
@@ -68,11 +70,28 @@ try {
   }
   await context.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }); });
   const page = await context.newPage();
-  await page.goto(TARGET_URL, { waitUntil: 'networkidle', timeout: 30000 });
-  const result = await page.evaluate((src) => {
-    const value = (0, eval)(src);
-    return typeof value === 'function' ? value() : value;
-  }, EXTRACTION_SCRIPT);
+  const response = await page.goto(TARGET_URL, { waitUntil: 'networkidle', timeout: 30000 });
+  const result = await page.evaluate(async ({ src, evaluatorSource, status }) => {
+    class CelSyntaxError extends Error {
+      constructor(message) {
+        super(message);
+        this.name = 'CelSyntaxError';
+      }
+    }
+    const evaluateCel = (0, eval)(\`(\${evaluatorSource})\`);
+    const vars = {};
+    let lastResult;
+    const cel = (expression) => evaluateCel(expression, {
+      vars,
+      page: { url: window.location.href, status, title: document.title },
+      lastResult,
+    }, CelSyntaxError);
+    const setVar = (name, value) => { vars[name] = value; };
+    const getVar = (name) => vars[name];
+    const value = eval(src);
+    lastResult = await (typeof value === 'function' ? value() : value);
+    return lastResult;
+  }, { src: EXTRACTION_SCRIPT, evaluatorSource: CEL_EVALUATOR_SOURCE, status: response?.status() });
   console.log(JSON.stringify(result, null, 2));
   if (DOWNLOAD) await downloadImages(collectImageUrls(result), IMAGES_DIR);
 } finally {

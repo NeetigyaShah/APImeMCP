@@ -5,6 +5,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ActionSequence, ActionStep, ExtractionMeta, ExtractionResult, MeasureRecord, RunKind, WaitStrategy } from './types.js';
+import { evaluateCel } from './cel-eval.js';
 import type { DriftReport } from './drift.js';
 import { recordMeasure } from './metrics.js';
 import { validateOutput } from './schema.js';
@@ -348,7 +349,7 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
     const page = await context.newPage();
     page.on('request', (request) => options.onNetworkRequest?.(request.url()));
     try {
-      await page.goto(options.targetUrl, {
+      const response = await page.goto(options.targetUrl, {
         timeout: NAVIGATION_TIMEOUT_MS,
         waitUntil: options.waitStrategy ?? DEFAULT_WAIT_STRATEGY,
       });
@@ -363,11 +364,30 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
       // Templates are written either way (bare `async () => {...}` or a self-invoking
       // `(async () => {...})()`), so eval the source in-page and call it only if it's
       // still a function, rather than picking one convention and breaking the other.
-      const rawResult = await page.evaluate((src) => {
+      const rawResult = await page.evaluate(async ({ src, evaluatorSource, status }: { src: string; evaluatorSource: string; status?: number }) => {
+        const browser = globalThis as unknown as { location: { href: string }; document: { title: string } };
+        class CelSyntaxError extends Error {
+          constructor(message: string) {
+            super(message);
+            this.name = 'CelSyntaxError';
+          }
+        }
         // eslint-disable-next-line no-eval
-        const value = (0, eval)(src);
-        return typeof value === 'function' ? value() : value;
-      }, script);
+        const evaluateCel = (0, eval)(`(${evaluatorSource})`);
+        const vars: Record<string, unknown> = {};
+        let lastResult: unknown;
+        const cel = (expression: string) => evaluateCel(expression, {
+          vars,
+          page: { url: browser.location.href, status, title: browser.document.title },
+          lastResult,
+        }, CelSyntaxError);
+        const setVar = (name: string, value: unknown) => { vars[name] = value; };
+        const getVar = (name: string) => vars[name];
+        // eslint-disable-next-line no-eval
+        const value = eval(src);
+        lastResult = await (typeof value === 'function' ? value() : value);
+        return lastResult;
+      }, { src: script, evaluatorSource: evaluateCel.toString(), status: response?.status() });
       return assertJsonSerializable(rawResult);
     } catch (err) {
       if (options.captureForensicsOnError === false) throw err;

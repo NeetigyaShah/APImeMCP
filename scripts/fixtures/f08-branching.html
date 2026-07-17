@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head><title>F08 Branching Fixture</title></head>
+  <body data-stock="{{STOCK}}">
+    <div data-stock="{{STOCK}}">{{LABEL}}</div>
+    <button id="load-more" {{HIDDEN}}>Load more</button>
+    <output id="loaded">not-loaded</output>
+    <script>
+      document.querySelector('#load-more').addEventListener('click', () => {
+        document.querySelector('#loaded').textContent = 'loaded';
+      });
+    </script>
+  </body>
+</html>
