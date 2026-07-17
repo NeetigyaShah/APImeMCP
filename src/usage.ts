@@ -71,7 +71,7 @@ try {
   await context.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }); });
   const page = await context.newPage();
   const response = await page.goto(TARGET_URL, { waitUntil: 'networkidle', timeout: 30000 });
-  const result = await page.evaluate((src, evaluatorSource, status) => {
+  const result = await page.evaluate(async ({ src, evaluatorSource, status }) => {
     class CelSyntaxError extends Error {
       constructor(message) {
         super(message);
@@ -91,7 +91,7 @@ try {
     const value = eval(src);
     lastResult = await (typeof value === 'function' ? value() : value);
     return lastResult;
-  }, EXTRACTION_SCRIPT, CEL_EVALUATOR_SOURCE, response?.status());
+  }, { src: EXTRACTION_SCRIPT, evaluatorSource: CEL_EVALUATOR_SOURCE, status: response?.status() });
   console.log(JSON.stringify(result, null, 2));
   if (DOWNLOAD) await downloadImages(collectImageUrls(result), IMAGES_DIR);
 } finally {

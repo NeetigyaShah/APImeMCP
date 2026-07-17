@@ -10,14 +10,14 @@
     "S6": "Done",
     "S7": "Done",
     "S8": "Done",
-    "S9": "Blocked",
+    "S9": "Done",
     "S10": "Done",
     "S11": "Done"
   },
-  "overall": "Blocked",
-  "currentGate": "G2",
-  "blockedBy": "G2 code review: src/usage.ts:74 generated standalone page.evaluate callback is not async, but src/usage.ts:92 uses await; exported apis/<id>.mjs fails to parse/run.",
+  "overall": "In-Progress",
+  "currentGate": "G3",
+  "blockedBy": null,
   "owner": null,
   "reviewer": "Codex F08 gate reviewer",
-  "updatedAt": "2026-07-17T12:33:45.557Z"
+  "updatedAt": "2026-07-17T12:44:37.548Z"
 }
