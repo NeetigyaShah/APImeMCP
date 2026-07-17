@@ -399,6 +399,23 @@ untouched by this — trusted by definition, same as always. Same functionality 
 without an MCP client: `apimemcp add <domain>` (no browser/dashboard startup, just a
 fetch + local registration).
 
+### `discover_templates`
+
+Search locally registered and community-registry templates before authoring a new
+one. Matching is lexical and explainable: each hit includes a `score` from `0` to
+`1` and the matching fields in `matchedOn`.
+
+| field | type | notes |
+|---|---|---|
+| `domain` | string | natural-language description such as `SEC EDGAR filings` or `stock quotes` |
+| `limit` | number, optional | maximum results; defaults to `10`, maximum `50` |
+| `source` | `'local'\|'registry'\|'both'`, optional | source to search; defaults to `'both'` |
+
+For example, call `discover_templates` with `{ domain: 'SEC EDGAR filings' }`
+before using `synthesize_schema` or recording a new workflow. Set
+`source: 'local'` to search without fetching the community registry. The tool is
+read-only: it does not launch a browser, write templates, or access saved cookies.
+
 ### `execute_native_extraction`
 
 Run a registered template against a URL.

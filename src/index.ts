@@ -7,7 +7,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ensureStorageInitialized, findTemplateById, findTemplateByUrl, loadManifest, registerTemplate } from './storage.js';
 import { closeBrowser, confirmOpenAppConnection, createSuccessfulExtractionResult, executeActionSequence, executeExtraction, executeMeasured, initBrowser, isBrowserReady, openAppConnection, REGISTRY_CDN_ALLOWLIST, renderPage, startConfiguredAppConnections } from './engine.js';
 import { getSavedCookies, saveCookies } from './cookie-store.js';
-import { addFromRegistry } from './registry-client.js';
+import { addFromRegistry, fetchRegistryManifest } from './registry-client.js';
 import { addCommunityTemplateCore } from './tools/add-community-template.js';
 import { batchDownload } from './downloader.js';
 import { getAllSla, preExecutionMeasure } from './metrics.js';
@@ -31,6 +31,7 @@ import { registerAddCommunityTemplateTool } from './tools/add-community-template
 import { registerConnectAppTool, registerConfirmAppConnectionTool, registerListAppConnectionsTool } from './tools/app-connections-tools.js';
 import { registerSynthesizeSchemaTool } from './tools/synthesize-schema.js';
 import { registerPreviewTransformTool } from './tools/transform-tool.js';
+import { registerDiscoverTemplatesTool } from './discovery.js';
 
 let updateStatus: UpdateStatus = { updateAvailable: false, latestCommit: null };
 
@@ -87,6 +88,22 @@ const deps: ToolDeps = {
   notifications: { send: sendNotification },
   downloads: { batch: batchDownload },
   registry: { add: addFromRegistry },
+  discovery: {
+    listLocalTemplates: async () => Object.values(await loadManifest()).map((entry) => ({
+      templateId: entry.templateId,
+      name: entry.templateId,
+      tags: [entry.domainPattern],
+      targetUrl: entry.fixedTargetUrl ?? `https://${entry.domainPattern}`,
+      source: 'local' as const,
+    })),
+    listRegistryTemplates: async () => Object.values(await fetchRegistryManifest()).map((entry) => ({
+      templateId: entry.templateId,
+      name: entry.templateId,
+      tags: [entry.domainPattern],
+      targetUrl: entry.fixedTargetUrl ?? `https://${entry.domainPattern}`,
+      source: 'registry' as const,
+    })),
+  },
   progress: { report: reportProgress },
   log,
   logError,
@@ -105,6 +122,7 @@ registerBatchDownloadAssetsTool(server, deps);
 registerAddCommunityTemplateTool(server, deps);
 registerSynthesizeSchemaTool(server, deps.engine);
 registerPreviewTransformTool(server, {});
+registerDiscoverTemplatesTool(server, deps.discovery);
 
 server.registerPrompt('get_environment_context', {
   title: 'Environment Context',

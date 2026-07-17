@@ -36,6 +36,7 @@ export interface ToolDeps {
   notifications: { send: (endpointUrl: string, message: string) => Promise<void> };
   downloads: { batch: (urls: string[], outputDir: string, onProgress: (current: number, total: number) => void) => Promise<Array<{ success: boolean }>> };
   registry: { add: (domain: string) => Promise<{ registered: boolean; templateId?: string; error?: string }> };
+  discovery: import('../discovery.js').DiscoveryDeps;
   progress: { report: (update: { tool: string; status: 'running' | 'done' | 'failed'; current: number; total: number; message: string }) => Promise<void> };
   log: (message: string) => void;
   logError: (message: string) => void;

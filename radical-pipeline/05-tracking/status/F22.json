@@ -2,22 +2,22 @@
   "id": "F22",
   "subtasks": {
     "S0": "Done",
-    "S1": "Todo",
-    "S2": "Todo",
-    "S3": "Todo",
-    "S4": "Todo",
-    "S5": "Todo",
-    "S6": "Todo",
+    "S1": "Done",
+    "S2": "Done",
+    "S3": "Done",
+    "S4": "Done",
+    "S5": "Done",
+    "S6": "Done",
     "S7": "N/A",
-    "S8": "Todo",
-    "S9": "Todo",
+    "S8": "Done",
+    "S9": "Done",
     "S10": "N/A",
     "S11": "Todo"
   },
-  "overall": "Not-started",
-  "currentGate": "G1",
+  "overall": "In-Progress",
+  "currentGate": "G7",
   "blockedBy": null,
   "owner": "f22-builder",
   "reviewer": null,
-  "updatedAt": "2026-07-17T08:22:03.702Z"
+  "updatedAt": "2026-07-17T08:41:02.482Z"
 }
