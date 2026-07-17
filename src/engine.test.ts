@@ -70,4 +70,13 @@ describe('crystallizeRecording', () => {
       steps: [{ kind: 'fill', selector: 'input[type=password]', value: 'super-secret', label: 'Password' }],
     })).toThrow(/secret-like field/i);
   });
+
+  it('rejects secret-looking fill values even when selector hints are generic', () => {
+    const fakeSecret = ['sk', 'live', '1234567890abcdef1234567890abcdef'].join('_');
+
+    expect(() => crystallizeRecording({
+      targetUrl: 'https://example.com/search',
+      steps: [{ kind: 'fill', selector: '#query', value: fakeSecret, label: 'Search' }],
+    })).toThrow(/secret-like fill value/i);
+  });
 });

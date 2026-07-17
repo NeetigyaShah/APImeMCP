@@ -114,7 +114,35 @@ describe('synthesize_schema tool', () => {
       'registerTemplate',
       'saveRecording',
     ]);
-    expect(deps.submitTemplatePR).toHaveBeenCalledWith(expect.objectContaining({ templateId: 'example-product' }), { githubToken: 'test-token' });
+    expect(deps.submitTemplatePR).toHaveBeenCalledWith(expect.objectContaining({ templateId: 'example-product' }), {
+      githubToken: 'test-token',
+      executableScript: '() => ({ price: document.querySelector("[data-price]").textContent.trim() })',
+    });
+  });
+
+  it('preserves a recording outputSchema when no top-level outputSchema is supplied', async () => {
+    const { deps, registrations, calls } = createHarness();
+    registerSynthesizeSchemaTool({ tool: (name: string, _shape: unknown, handler: Registration['handler']) => registrations.push({ name, handler }) } as unknown as McpServer, deps);
+    const outputSchema = {
+      type: 'object',
+      required: ['price'],
+      properties: { price: { type: 'string' } },
+    };
+
+    await registrations[0].handler({
+      targetUrl: 'https://example.com/product',
+      templateId: 'example-product',
+      recording: {
+        targetUrl: 'https://example.com/product',
+        steps: [{ kind: 'extract', selector: '[data-price]', field: 'price' }],
+        outputSchema,
+      },
+    });
+
+    expect(calls).toContainEqual([
+      'registerTemplate',
+      expect.objectContaining({ templateId: 'example-product', outputSchema }),
+    ]);
   });
 
   it('short-circuits when the target URL already has a template', async () => {

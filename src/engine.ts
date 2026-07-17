@@ -29,6 +29,17 @@ const USER_AGENT =
 const VIEWPORT = { width: 1280, height: 800 };
 const NAVIGATION_TIMEOUT_MS = 30_000;
 const SECRET_FIELD_HINT = /\b(password|passwd|pwd|token|secret|api[-_\s]?key|cookie|session|auth|credential)\b/i;
+const SECRET_VALUE_PATTERNS = [
+  /\b(?:sk|pk)_(?:live|test)_[a-z0-9]{16,}\b/i,
+  /\bsk-[a-z0-9_-]{20,}\b/i,
+  /\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[a-z0-9_]{20,}\b/i,
+  /\bxox[baprs]-[a-z0-9-]{20,}\b/i,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bAIza[0-9A-Za-z_-]{20,}\b/,
+  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/,
+  /\bBearer\s+[A-Za-z0-9._~+/-]{16,}=*\b/i,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+];
 
 export function createSuccessfulExtractionResult(
   data: unknown,
@@ -49,11 +60,25 @@ export function createSuccessfulExtractionResult(
 let browserInstance: Browser | undefined;
 const appContexts = new Map<string, BrowserContext>();
 
+function looksLikeSecretValue(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (SECRET_VALUE_PATTERNS.some((pattern) => pattern.test(trimmed))) return true;
+  if (SECRET_FIELD_HINT.test(trimmed) && /[:=]/.test(trimmed)) return true;
+  const compact = trimmed.replace(/\s/g, '');
+  if (compact.length < 32) return false;
+  if (/^[a-f0-9]{32,}$/i.test(compact)) return true;
+  return /^[A-Za-z0-9+/_=-]{32,}$/.test(compact) && /[a-z]/.test(compact) && /[A-Z]/.test(compact) && /\d/.test(compact);
+}
+
 function assertNoInlineSecretFill(step: CrystallizedActionStep): void {
   if (step.kind !== 'fill' || !step.value) return;
   const context = `${step.selector} ${step.label ?? ''}`;
   if (SECRET_FIELD_HINT.test(context)) {
     throw new Error('Recording contains a fill value for a secret-like field; use an app connection or vault indirection instead.');
+  }
+  if (looksLikeSecretValue(step.value)) {
+    throw new Error('Recording contains a secret-like fill value; use an app connection or vault indirection instead.');
   }
 }
 

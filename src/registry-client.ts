@@ -122,6 +122,7 @@ export async function addFromRegistry(domain: string): Promise<AddFromRegistryRe
 export interface SubmitPrOptions {
   githubToken: string;
   branch?: string;
+  executableScript: string;
 }
 
 interface GitHubRefResponse {
@@ -164,11 +165,37 @@ function decodeBase64(value: string): string {
   return Buffer.from(value.replace(/\s/g, ''), 'base64').toString('utf8');
 }
 
-function buildTemplatePrBody(entry: ManifestEntry): string {
+function normalizeRegistryPath(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!normalized || normalized.split('/').some((part) => !part || part === '.' || part === '..')) {
+    throw new Error('scriptPath must be a relative registry path');
+  }
+  return normalized;
+}
+
+function githubContentsPath(filePath: string): string {
+  return normalizeRegistryPath(filePath).split('/').map(encodeURIComponent).join('/');
+}
+
+function registryScriptPath(filePath: string): string {
+  const parts = normalizeRegistryPath(filePath).split('/');
+  const fileName = parts[parts.length - 1];
+  if (!fileName) throw new Error('scriptPath must include a file name');
+  return fileName;
+}
+
+function withTrailingNewline(value: string): string {
+  return value.endsWith('\n') ? value : `${value}\n`;
+}
+
+function buildTemplatePrBody(entry: ManifestEntry, scriptPath: string): string {
   return [
     'auto-generated via computer-use crystallization — review required',
     '',
     'This PR was opened by APImeMCP after a successful local crystallization dry-run.',
+    'Review both changed files and let registry CI secret-scan the generated script before merge.',
+    '',
+    `Generated script: \`${scriptPath}\``,
     '',
     'Manifest entry:',
     '',
@@ -181,8 +208,11 @@ function buildTemplatePrBody(entry: ManifestEntry): string {
 export async function submitTemplatePR(entry: ManifestEntry, opts: SubmitPrOptions): Promise<{ prUrl: string }> {
   const token = opts.githubToken.trim();
   if (!token) throw new Error('githubToken is required to submit a template PR');
+  if (!opts.executableScript) throw new Error('executableScript is required to submit a template PR');
 
   const branch = opts.branch ?? `crystallize/${entry.templateId}-${Date.now()}`;
+  const manifestEntry = { ...entry, scriptPath: registryScriptPath(entry.scriptPath) };
+  const scriptRepoPath = `registry/${manifestEntry.scriptPath}`;
   const baseRef = await githubRequest<GitHubRefResponse>(`/repos/${REGISTRY_OWNER}/${REGISTRY_REPO}/git/ref/heads/${REGISTRY_BRANCH}`, token);
 
   await githubRequest(`/repos/${REGISTRY_OWNER}/${REGISTRY_REPO}/git/refs`, token, {
@@ -196,12 +226,21 @@ export async function submitTemplatePR(entry: ManifestEntry, opts: SubmitPrOptio
     token
   );
   const manifest = JSON.parse(decodeBase64(manifestFile.content)) as Manifest;
-  manifest[entry.templateId] = entry;
+  manifest[manifestEntry.templateId] = manifestEntry;
+
+  await githubRequest(`/repos/${REGISTRY_OWNER}/${REGISTRY_REPO}/contents/${githubContentsPath(scriptRepoPath)}`, token, {
+    method: 'PUT',
+    body: JSON.stringify({
+      message: `Add crystallized script ${manifestEntry.templateId}`,
+      content: encodeBase64(withTrailingNewline(opts.executableScript)),
+      branch,
+    }),
+  });
 
   await githubRequest(`/repos/${REGISTRY_OWNER}/${REGISTRY_REPO}/contents/${manifestPath}`, token, {
     method: 'PUT',
     body: JSON.stringify({
-      message: `Add crystallized template ${entry.templateId}`,
+      message: `Add crystallized template ${manifestEntry.templateId}`,
       content: encodeBase64(`${JSON.stringify(manifest, null, 2)}\n`),
       branch,
       sha: manifestFile.sha,
@@ -211,10 +250,10 @@ export async function submitTemplatePR(entry: ManifestEntry, opts: SubmitPrOptio
   const pull = await githubRequest<GitHubPullResponse>(`/repos/${REGISTRY_OWNER}/${REGISTRY_REPO}/pulls`, token, {
     method: 'POST',
     body: JSON.stringify({
-      title: `Add crystallized template ${entry.templateId}`,
+      title: `Add crystallized template ${manifestEntry.templateId}`,
       head: branch,
       base: REGISTRY_BRANCH,
-      body: buildTemplatePrBody(entry),
+      body: buildTemplatePrBody(manifestEntry, scriptRepoPath),
       maintainer_can_modify: true,
       draft: false,
     }),

@@ -48,7 +48,7 @@ export interface ToolDeps {
   downloads: { batch: (urls: string[], outputDir: string, onProgress: (current: number, total: number) => void) => Promise<Array<{ success: boolean }>> };
   registry: {
     add: (domain: string) => Promise<{ registered: boolean; templateId?: string; error?: string }>;
-    submitTemplatePR?: (entry: ManifestEntry, opts: { githubToken: string; branch?: string }) => Promise<{ prUrl: string }>;
+    submitTemplatePR?: (entry: ManifestEntry, opts: { githubToken: string; executableScript: string; branch?: string }) => Promise<{ prUrl: string }>;
   };
   discovery: import('../discovery.js').DiscoveryDeps;
   progress: { report: (update: { tool: string; status: 'running' | 'done' | 'failed'; current: number; total: number; message: string }) => Promise<void> };

@@ -13,7 +13,7 @@ export interface SynthesizeSchemaDeps {
   loadManifest: () => Promise<Manifest>;
   findTemplateByUrl: (manifest: Manifest, targetUrl: string) => ManifestEntry | undefined;
   saveRecording: (recording: Recording) => Promise<void>;
-  submitTemplatePR: (entry: ManifestEntry, opts: { githubToken: string }) => Promise<{ prUrl: string }>;
+  submitTemplatePR: (entry: ManifestEntry, opts: { githubToken: string; executableScript: string; branch?: string }) => Promise<{ prUrl: string }>;
 }
 
 export const SynthesizeSchemaShape = {
@@ -93,6 +93,7 @@ export function registerSynthesizeSchemaTool(server: McpServer, deps: Synthesize
       if (parsedRecording && normalizeUrl(parsedRecording.targetUrl) !== normalizeUrl(targetUrl)) {
         throw new Error('recording.targetUrl must match targetUrl.');
       }
+      const effectiveOutputSchema = (outputSchema ?? parsedRecording?.outputSchema) as Record<string, unknown> | undefined;
 
       let recordingRecord: Recording | undefined;
       if (parsedRecording) {
@@ -121,13 +122,13 @@ export function registerSynthesizeSchemaTool(server: McpServer, deps: Synthesize
         domainPattern: domainPattern ?? domainFromUrl(targetUrl),
         executableScript,
         fixedTargetUrl: targetUrl,
-        outputSchema: outputSchema as Record<string, unknown> | undefined,
+        outputSchema: effectiveOutputSchema,
       });
 
       let prUrl: string | undefined;
       if (autoPr === true) {
         if (!githubToken) throw new Error('githubToken is required when autoPr is true.');
-        prUrl = (await deps.submitTemplatePR(entry, { githubToken })).prUrl;
+        prUrl = (await deps.submitTemplatePR(entry, { githubToken, executableScript })).prUrl;
       }
 
       if (recordingRecord) {
