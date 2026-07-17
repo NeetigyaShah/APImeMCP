@@ -11,7 +11,7 @@ export function isDomainAllowed(domain: string, allowlist: string[] | undefined)
   const normalizedDomain = domain.toLowerCase();
   return allowlist.some((allowedDomain) => {
     const normalizedAllowedDomain = allowedDomain.toLowerCase();
-    return normalizedAllowedDomain === '*' || normalizedDomain === normalizedAllowedDomain || normalizedDomain.endsWith(`.${normalizedAllowedDomain}`);
+    return normalizedAllowedDomain !== '*' && (normalizedDomain === normalizedAllowedDomain || normalizedDomain.endsWith(`.${normalizedAllowedDomain}`));
   });
 }
 
@@ -19,7 +19,7 @@ export function lintManifestEntry(entry: ManifestEntry, rawScript: string): Lint
   const errors: string[] = [];
   const warnings: string[] = [];
   if (!entry.allowedDomains?.length) errors.push('missing/empty network allowlist');
-  if (entry.allowedDomains?.includes('*')) warnings.push("wildcard '*' allowlist defeats sandboxing");
+  if (entry.allowedDomains?.includes('*')) errors.push("wildcard '*' is not permitted in a network allowlist");
   for (const pattern of ['child_process', 'eval(', 'fs.unlink', 'fs.writeFile']) {
     if (rawScript.includes(pattern)) errors.push(`disallowed pattern in template script: ${pattern}`);
   }

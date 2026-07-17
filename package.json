@@ -9,12 +9,14 @@
   },
   "bin": {
     "apimemcp": "dist/index.js",
-    "apimemcp-verify-registry": "scripts/verify-registry.mjs"
+    "apimemcp-verify-registry": "scripts/verify-registry.mjs",
+    "apimemcp-lint-templates": "scripts/lint-templates.mjs"
   },
   "files": [
     "dist/**/*.js",
     "scripts/verify-registry.mjs",
     "scripts/verify-registry-core.js",
+    "scripts/lint-templates.mjs",
     "skills/**"
   ],
   "repository": {

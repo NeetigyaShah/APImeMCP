@@ -20,8 +20,6 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    env:
-      TEMPLATES_REPO_TOKEN: ${{ secrets.TEMPLATES_REPO_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,10 +32,13 @@ jobs:
       - name: Verify registry templates
         run: node scripts/verify-registry.mjs --out .verify-badges ${{ inputs.templateId && format('--only {0}', inputs.templateId) || '' }}
       - name: Publish badges to the templates registry
-        if: env.TEMPLATES_REPO_TOKEN != ''
         env:
           GH_TOKEN: ${{ secrets.TEMPLATES_REPO_TOKEN }}
         run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "TEMPLATES_REPO_TOKEN is unset; skipping badge publication."
+            exit 0
+          fi
           git clone "https://x-access-token:${GH_TOKEN}@github.com/NeetigyaShah/APImeMCP-Templates.git" templates-registry
           mkdir -p templates-registry/badges
           cp .verify-badges/*.json templates-registry/badges/
@@ -51,7 +52,3 @@ jobs:
             git commit -m "chore: update nightly verification badges"
             git push origin main
           fi
-      - name: Skip badge publication without token
-        if: env.TEMPLATES_REPO_TOKEN == ''
-        run: echo "TEMPLATES_REPO_TOKEN is unset; skipping badge publication."
-

@@ -11,8 +11,7 @@ async function main() {
     manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   } catch (error) {
     if (error?.code === 'ENOENT') {
-      console.log(`No local templates manifest at ${manifestPath}; nothing to lint.`);
-      return;
+      throw new Error(`Registry manifest is required for linting: ${manifestPath}`);
     }
     throw error;
   }

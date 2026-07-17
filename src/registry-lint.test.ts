@@ -16,7 +16,7 @@ describe('isDomainAllowed', () => {
     expect(isDomainAllowed('unrelated.example', ['example.com'])).toBe(false);
     expect(isDomainAllowed('example.com', undefined)).toBe(false);
     expect(isDomainAllowed('example.com', [])).toBe(false);
-    expect(isDomainAllowed('anything.example', ['*'])).toBe(true);
+    expect(isDomainAllowed('anything.example', ['*'])).toBe(false);
   });
 });
 
@@ -29,8 +29,8 @@ describe('lintManifestEntry', () => {
     });
   });
 
-  it('warns about wildcards and accepts a clean declared template', () => {
-    expect(lintManifestEntry({ ...entry, allowedDomains: ['*'] }, '')).toMatchObject({ warnings: ["wildcard '*' allowlist defeats sandboxing"] });
+  it('rejects wildcards and accepts a clean declared template', () => {
+    expect(lintManifestEntry({ ...entry, allowedDomains: ['*'] }, '')).toMatchObject({ errors: ["wildcard '*' is not permitted in a network allowlist"] });
     expect(lintManifestEntry({ ...entry, allowedDomains: ['example.com'] }, '() => document.title')).toEqual({
       templateId: 'example-template', errors: [], warnings: [],
     });

@@ -206,7 +206,7 @@ export const REGISTRY_CDN_ALLOWLIST = [
 ];
 
 function hostMatchesAllowlist(hostname: string, allowlist: string[]): boolean {
-  return allowlist.some((allowed) => hostname === allowed || hostname.endsWith(`.${allowed}`));
+  return allowlist.some((allowed) => allowed !== '*' && (hostname === allowed || hostname.endsWith(`.${allowed}`)));
 }
 
 function assertJsonSerializable(value: unknown): unknown {
