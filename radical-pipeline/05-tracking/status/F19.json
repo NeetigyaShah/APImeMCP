@@ -14,10 +14,10 @@
     "S10": "Done",
     "S11": "Done"
   },
-  "overall": "Ready-for-integration",
+  "overall": "Done",
   "currentGate": "G7",
   "blockedBy": null,
   "owner": null,
   "reviewer": null,
-  "updatedAt": "2026-07-17T09:44:53.321Z"
+  "updatedAt": "2026-07-17T09:48:38.943Z"
 }
