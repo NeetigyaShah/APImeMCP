@@ -91,12 +91,23 @@ describe('Monitor Tool', () => {
     const sub = monitors[0]!;
 
     // Simulate diff result that shows change
-    const diffResult = { changed: true, summary: 'price changed from 100 to 50' };
+    const diffResult = { changed: true, summary: 'price changed from 100 to 50', entries: [{ path: 'price', kind: 'field_changed', expected: '100', actual: '50' }] };
     (mockDeps.diff as any).mockReturnValue(diffResult);
 
-    // In a real scenario, notify would be called during tick
-    // For this test, we verify the monitor infrastructure supports it
-    expect(sub.notifyEndpointUrl).toBe('http://localhost:3000/webhook');
+    // First tick - establishes baseline
+    await (scheduler as any).tickMonitor(sub);
+    expect(notifyCalls).toHaveLength(0); // No notify on first tick
+
+    // Reset mock to return new data on second call
+    (mockDeps.runExtraction as any).mockResolvedValueOnce(newResult);
+
+    // Second tick - should detect change and call notify
+    await (scheduler as any).tickMonitor(sub);
+    expect(notifyCalls).toHaveLength(1);
+    expect(notifyCalls[0].event.changed).toBe(true);
+    expect(notifyCalls[0].event.summary).toBe('price changed from 100 to 50');
+    expect(notifyCalls[0].event.before).toEqual({ price: 100 });
+    expect(notifyCalls[0].event.after).toEqual({ price: 50 });
   });
 
   it('unsubscribe_monitor returns true and stops future ticks', async () => {

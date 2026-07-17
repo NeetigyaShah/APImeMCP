@@ -45,6 +45,67 @@ hostname.endsWith('.' + domainPattern)`), so registering `amazon.com` also match
 `domainPattern` at a time — registering a new template with a pattern that's already
 in use replaces the previous owner.
 
+## Change monitoring and webhooks
+
+Monitor extraction results for changes at a schedule and post diffs to webhooks. Monitors persist across server restarts.
+
+### subscribe_monitor
+
+Subscribe to periodic change detection on a template or URL:
+
+```js
+await client.callTool({
+  name: 'subscribe_monitor',
+  arguments: {
+    templateId: 'amazon-product',
+    targetUrl: 'https://www.amazon.com/dp/EXAMPLE',  // optional; resolved from template's fixedTargetUrl if omitted
+    cronExpression: '*/15 * * * *',                  // every 15 minutes
+    notifyEndpointUrl: 'https://your-webhook.example.com/handler',
+    inputs: { /* optional: template inputs */ }
+  }
+});
+```
+
+Returns `{ monitorId, templateId, createdAt }`. Monitors tick on the given cron schedule. The first tick establishes a baseline (no webhook notification). Each subsequent tick runs extraction, diffs against the previous result, and POSTs to `notifyEndpointUrl` only if the result changed:
+
+```json
+{
+  "monitorId": "mon_...",
+  "templateId": "amazon-product",
+  "changed": true,
+  "summary": "price changed from $49.99 to $39.99",
+  "before": { "price": "49.99", "title": "..." },
+  "after": { "price": "39.99", "title": "..." },
+  "at": "2026-07-17T12:30:00.000Z"
+}
+```
+
+### list_monitors
+
+List all active monitors:
+
+```js
+await client.callTool({
+  name: 'list_monitors',
+  arguments: {}
+});
+```
+
+Returns `{ monitors, count }` — each monitor includes `id`, `templateId`, `targetUrl`, `cronExpression`, `notifyEndpointUrl`, `active`, `lastRunAt`, `lastChange`, and hash of the last result.
+
+### unsubscribe_monitor
+
+Stop monitoring:
+
+```js
+await client.callTool({
+  name: 'unsubscribe_monitor',
+  arguments: { monitorId: 'mon_...' }
+});
+```
+
+Returns `{ ok: true }` on success.
+
 ## Requirements
 
 - Node.js 20+

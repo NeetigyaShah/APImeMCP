@@ -27,7 +27,7 @@ function getMonitorsPath(): string {
 type ExtractionRunner = (targetUrl: string, templateId?: string) => Promise<void>;
 
 export interface MonitorDeps {
-  runExtraction: (targetUrl: string, templateId?: string) => Promise<unknown>;
+  runExtraction: (targetUrl: string | undefined, templateId?: string) => Promise<unknown>;
   diff: (prev: unknown, curr: unknown) => DiffResult;
   notify: (endpointUrl: string, event: any) => Promise<void>;
   loadTemplate: (manifest: any, templateId: string) => ManifestEntry | undefined;
@@ -159,7 +159,7 @@ export class Scheduler {
     const deps = this.monitorDeps;
     return withLock(`monitor:${monitor.id}`, async () => {
       try {
-        const result = await deps.runExtraction(monitor.targetUrl || '', monitor.templateId);
+        const result = await deps.runExtraction(monitor.targetUrl || undefined, monitor.templateId);
         const resultStr = JSON.stringify(result);
         const resultHash = crypto.createHash('sha256').update(resultStr).digest('hex');
 
