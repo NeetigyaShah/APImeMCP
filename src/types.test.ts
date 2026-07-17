@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  ActionTraceSchema,
   AppConnectionSchema,
   ConnectAppInputSchema,
   ExecuteNativeExtractionInputSchema,
@@ -141,5 +142,35 @@ describe('AppConnectionSchema', () => {
 
   it('rejects secret-shaped stray fields', () => {
     expect(AppConnectionSchema.safeParse({ ...connection, password: 'not-stored-here' }).success).toBe(false);
+  });
+});
+
+describe('ActionTraceSchema', () => {
+  it('accepts a computer-use trace with ordered actions and output schema passthrough', () => {
+    const result = ActionTraceSchema.safeParse({
+      targetUrl: 'https://example.com/catalog',
+      steps: [
+        { kind: 'goto', url: 'https://example.com/catalog' },
+        { kind: 'fill', selector: '#part', value: 'ABC-123', label: 'Part number' },
+        { kind: 'click', selector: 'button[type=submit]', label: 'Search' },
+        { kind: 'waitFor', selector: '[data-price]' },
+        { kind: 'extract', selector: '[data-price]', field: 'price' },
+      ],
+      outputSchema: { type: 'object', properties: { price: { type: 'string' } } },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.steps[4]).toMatchObject({ attr: 'text' });
+      expect(result.data.outputSchema).toEqual({ type: 'object', properties: { price: { type: 'string' } } });
+    }
+  });
+
+  it('rejects empty traces and unknown action kinds', () => {
+    expect(ActionTraceSchema.safeParse({ targetUrl: 'https://example.com', steps: [] }).success).toBe(false);
+    expect(ActionTraceSchema.safeParse({
+      targetUrl: 'https://example.com',
+      steps: [{ kind: 'hover', selector: '#x' }],
+    }).success).toBe(false);
   });
 });

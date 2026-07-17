@@ -159,16 +159,46 @@ export const AddCommunityTemplateShape = {
 export const AddCommunityTemplateInputSchema = z.object(AddCommunityTemplateShape);
 export type AddCommunityTemplateInput = z.infer<typeof AddCommunityTemplateInputSchema>;
 
-export interface ActionStep {
+export const ActionStepSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('goto'), url: z.string().refine(isHttpUrl, { message: 'url must be an absolute http:// or https:// URL' }) }),
+  z.object({ kind: z.literal('click'), selector: z.string().min(1), label: z.string().optional() }),
+  z.object({ kind: z.literal('fill'), selector: z.string().min(1), value: z.string(), label: z.string().optional() }),
+  z.object({ kind: z.literal('waitFor'), selector: z.string().min(1) }),
+  z.object({
+    kind: z.literal('extract'),
+    selector: z.string().min(1),
+    field: z.string().min(1),
+    attr: z.enum(['text', 'href', 'src']).default('text'),
+  }),
+]);
+export type CrystallizedActionStep = z.infer<typeof ActionStepSchema>;
+
+export const ActionTraceSchema = z.object({
+  targetUrl: z.string().refine(isHttpUrl, { message: 'targetUrl must be an absolute http:// or https:// URL' }),
+  steps: z.array(ActionStepSchema).min(1),
+  outputSchema: z.record(z.unknown()).optional(),
+});
+export type ActionTrace = z.infer<typeof ActionTraceSchema>;
+
+export interface Recording {
+  id: string;
+  trace: ActionTrace;
+  createdAt: string;
+  crystallizedTemplateId?: string;
+  prUrl?: string;
+}
+
+export interface ReplayActionStep {
   type: 'click' | 'fill' | 'select' | 'navigate' | 'waitForNavigation';
   selectors?: string[]; // ordered fallback candidates, e.g. ["[data-testid=submit]", "button:has-text('Submit')"]
   value?: string; // for fill/select
   url?: string; // for navigate
 }
+export type ActionStep = ReplayActionStep | CrystallizedActionStep;
 
 export interface ActionSequence {
   startUrl: string;
-  steps: ActionStep[];
+  steps: ReplayActionStep[];
   // Raw chrome.cookies.getAll() shape (name, value, domain, path, secure, httpOnly, sameSite,
   // expirationDate, ...) - NOT yet mapped to Playwright's addCookies shape. The server maps
   // chrome cookie fields -> Playwright's shape (expirationDate -> expires; sameSite

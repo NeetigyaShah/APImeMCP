@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>F06 Unmapped Supplier</title>
+  </head>
+  <body>
+    <h1>Supplier catalog lookup</h1>
+    <label for="part">Part number</label>
+    <input id="part" name="part" autocomplete="off">
+    <button id="search" type="button">Search</button>
+    <section id="result" hidden>
+      <h2 data-name></h2>
+      <p data-price></p>
+      <p data-stock></p>
+      <a data-details href="/catalog/ABC-123">Details</a>
+    </section>
+    <script>
+      document.querySelector('#search').addEventListener('click', () => {
+        const part = document.querySelector('#part').value.trim();
+        if (part !== 'ABC-123') return;
+        document.querySelector('[data-name]').textContent = 'Radical Widget ABC-123';
+        document.querySelector('[data-price]').textContent = '$42.00';
+        document.querySelector('[data-stock]').textContent = 'In stock';
+        const result = document.querySelector('#result');
+        result.hidden = false;
+        result.setAttribute('data-result', 'ready');
+      });
+    </script>
+  </body>
+</html>

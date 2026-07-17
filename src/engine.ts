@@ -4,8 +4,9 @@ import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { ActionSequence, ActionStep, ExtractionMeta, ExtractionResult, MeasureRecord, RunKind, WaitStrategy } from './types.js';
+import type { ActionSequence, ActionStep, ActionTrace, CrystallizedActionStep, ExtractionMeta, ExtractionResult, MeasureRecord, ReplayActionStep, RunKind, WaitStrategy } from './types.js';
 import { evaluateCel } from './cel-eval.js';
+import { ActionTraceSchema } from './types.js';
 import type { DriftReport } from './drift.js';
 import { recordMeasure } from './metrics.js';
 import { validateOutput } from './schema.js';
@@ -29,6 +30,18 @@ const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const VIEWPORT = { width: 1280, height: 800 };
 const NAVIGATION_TIMEOUT_MS = 30_000;
+const SECRET_FIELD_HINT = /\b(password|passwd|pwd|token|secret|api[-_\s]?key|cookie|session|auth|credential)\b/i;
+const SECRET_VALUE_PATTERNS = [
+  /\b(?:sk|pk)_(?:live|test)_[a-z0-9]{16,}\b/i,
+  /\bsk-[a-z0-9_-]{20,}\b/i,
+  /\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[a-z0-9_]{20,}\b/i,
+  /\bxox[baprs]-[a-z0-9-]{20,}\b/i,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bAIza[0-9A-Za-z_-]{20,}\b/,
+  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/,
+  /\bBearer\s+[A-Za-z0-9._~+/-]{16,}=*\b/i,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+];
 
 export function createSuccessfulExtractionResult(
   data: unknown,
@@ -48,6 +61,116 @@ export function createSuccessfulExtractionResult(
 
 let browserInstance: Browser | undefined;
 const appContexts = new Map<string, BrowserContext>();
+
+function looksLikeSecretValue(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (SECRET_VALUE_PATTERNS.some((pattern) => pattern.test(trimmed))) return true;
+  if (SECRET_FIELD_HINT.test(trimmed) && /[:=]/.test(trimmed)) return true;
+  const compact = trimmed.replace(/\s/g, '');
+  if (compact.length < 32) return false;
+  if (/^[a-f0-9]{32,}$/i.test(compact)) return true;
+  return /^[A-Za-z0-9+/_=-]{32,}$/.test(compact) && /[a-z]/.test(compact) && /[A-Z]/.test(compact) && /\d/.test(compact);
+}
+
+function assertNoInlineSecretFill(step: CrystallizedActionStep): void {
+  if (step.kind !== 'fill' || !step.value) return;
+  const context = `${step.selector} ${step.label ?? ''}`;
+  if (SECRET_FIELD_HINT.test(context)) {
+    throw new Error('Recording contains a fill value for a secret-like field; use an app connection or vault indirection instead.');
+  }
+  if (looksLikeSecretValue(step.value)) {
+    throw new Error('Recording contains a secret-like fill value; use an app connection or vault indirection instead.');
+  }
+}
+
+function emitTraceStep(step: CrystallizedActionStep): string {
+  assertNoInlineSecretFill(step);
+  if (step.kind === 'goto') {
+    return `  await assertCurrentUrl(${JSON.stringify(step.url)});`;
+  }
+  if (step.kind === 'fill') {
+    return `  await fillSelector(${JSON.stringify(step.selector)}, ${JSON.stringify(step.value)});`;
+  }
+  if (step.kind === 'click') {
+    return `  await clickSelector(${JSON.stringify(step.selector)});`;
+  }
+  if (step.kind === 'waitFor') {
+    return `  await waitForSelector(${JSON.stringify(step.selector)});`;
+  }
+  return `  result[${JSON.stringify(step.field)}] = await extractSelector(${JSON.stringify(step.selector)}, ${JSON.stringify(step.attr)});`;
+}
+
+export function crystallizeRecording(trace: ActionTrace): string {
+  const parsedTrace = ActionTraceSchema.parse(trace);
+  const seenExtractFields = new Set<string>();
+  for (const step of parsedTrace.steps) {
+    if (step.kind !== 'extract') continue;
+    if (seenExtractFields.has(step.field)) {
+      console.warn(`Duplicate extract field "${step.field}" in recording; the last value wins.`);
+    }
+    seenExtractFields.add(step.field);
+  }
+
+  const body = parsedTrace.steps.map(emitTraceStep).join('\n');
+  return `(async () => {
+  const result = {};
+
+  async function waitForSelector(selector, timeoutMs = ${NAVIGATION_TIMEOUT_MS}) {
+    const existing = document.querySelector(selector);
+    if (existing) return existing;
+    return await new Promise((resolve, reject) => {
+      const startedAt = Date.now();
+      const observer = new MutationObserver(() => {
+        const node = document.querySelector(selector);
+        if (node) {
+          clearTimeout(timer);
+          observer.disconnect();
+          resolve(node);
+        }
+      });
+      const timer = setTimeout(() => {
+        observer.disconnect();
+        reject(new Error('Timed out waiting for selector ' + selector + ' after ' + (Date.now() - startedAt) + 'ms'));
+      }, timeoutMs);
+      observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+    });
+  }
+
+  async function assertCurrentUrl(expectedUrl) {
+    const expected = new URL(expectedUrl, document.baseURI);
+    const current = new URL(location.href);
+    if (current.href !== expected.href) {
+      throw new Error('Recording expected ' + expected.href + ' but page is at ' + current.href);
+    }
+  }
+
+  async function fillSelector(selector, value) {
+    const element = await waitForSelector(selector);
+    if (!('value' in element)) throw new Error('Selector is not fillable: ' + selector);
+    element.value = value;
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  async function clickSelector(selector) {
+    const element = await waitForSelector(selector);
+    if (typeof element.click !== 'function') throw new Error('Selector is not clickable: ' + selector);
+    element.click();
+  }
+
+  async function extractSelector(selector, attr) {
+    const element = await waitForSelector(selector);
+    if (attr === 'text') return (element.textContent || '').trim();
+    const value = element.getAttribute(attr);
+    if ((attr === 'href' || attr === 'src') && value) return new URL(value, document.baseURI).href;
+    return value;
+  }
+
+${body}
+  return result;
+})()`;
+}
 
 export async function executeMeasured<T>(
   measure: { templateId: string; kind: RunKind },
@@ -447,7 +570,7 @@ function mapChromeCookies(cookies: Array<Record<string, unknown>>) {
 
 const STEP_SELECTOR_TIMEOUT_MS = 3000;
 
-async function runActionStep(page: Page, step: ActionStep): Promise<void> {
+async function runActionStep(page: Page, step: ReplayActionStep): Promise<void> {
   if (step.type === 'navigate') {
     await page.goto(step.url ?? '', { waitUntil: 'networkidle', timeout: NAVIGATION_TIMEOUT_MS });
     return;

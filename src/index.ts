@@ -4,10 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { ensureStorageInitialized, findTemplateById, findTemplateByUrl, loadManifest, registerTemplate, atomicWriteFile } from './storage.js';
-import { closeBrowser, confirmOpenAppConnection, createSuccessfulExtractionResult, executeActionSequence, executeExtraction, executeMeasured, initBrowser, isBrowserReady, openAppConnection, REGISTRY_CDN_ALLOWLIST, renderPage, startConfiguredAppConnections } from './engine.js';
+import { ensureStorageInitialized, findTemplateById, findTemplateByUrl, loadManifest, registerTemplate, atomicWriteFile, loadRecording, listRecordings, saveRecording } from './storage.js';
+import { closeBrowser, confirmOpenAppConnection, createSuccessfulExtractionResult, crystallizeRecording, executeActionSequence, executeExtraction, executeMeasured, initBrowser, isBrowserReady, openAppConnection, REGISTRY_CDN_ALLOWLIST, renderPage, startConfiguredAppConnections } from './engine.js';
 import { getSavedCookies, saveCookies } from './cookie-store.js';
-import { addFromRegistry, fetchRegistryManifest, openTemplatePr } from './registry-client.js';
+import { addFromRegistry, fetchRegistryManifest, openTemplatePr, submitTemplatePR } from './registry-client.js';
 import { addCommunityTemplateCore } from './tools/add-community-template.js';
 import { batchDownload } from './downloader.js';
 import { getAllSla, preExecutionMeasure, recordMeasure } from './metrics.js';
@@ -87,15 +87,16 @@ const scheduler = new Scheduler(async (targetUrl, templateId) => {
 const server = new McpServer({ name: 'APImeMCP', version: '1.5.0' });
 const deps: ToolDeps = {
   appConnections: { upsert: upsertAppConnection, list: listAppConnections },
-  engine: { open: openAppConnection, confirm: confirmOpenAppConnection, renderPage },
+  engine: { open: openAppConnection, confirm: confirmOpenAppConnection, renderPage, crystallizeRecording, executeExtraction },
   extraction: { run: runExtraction },
-  templates: { register: registerTemplate },
+  templates: { register: registerTemplate, loadManifest, findByUrl: findTemplateByUrl },
+  recordings: { save: saveRecording, load: loadRecording, list: listRecordings },
   cookies: { save: saveCookies },
   scheduler,
   metrics: { getStats: getAllSla },
   notifications: { send: sendNotification },
   downloads: { batch: batchDownload },
-  registry: { add: addFromRegistry },
+  registry: { add: addFromRegistry, submitTemplatePR },
   discovery: {
     listLocalTemplates: async () => Object.values(await loadManifest()).map((entry) => ({
       templateId: entry.templateId,
@@ -165,7 +166,16 @@ registerGetExtractionStatsTool(server, deps);
 registerSendNotificationTool(server, deps);
 registerBatchDownloadAssetsTool(server, deps);
 registerAddCommunityTemplateTool(server, deps);
-registerSynthesizeSchemaTool(server, deps.engine);
+registerSynthesizeSchemaTool(server, {
+  renderPage,
+  crystallizeRecording,
+  executeExtraction,
+  registerTemplate,
+  loadManifest,
+  findTemplateByUrl,
+  saveRecording,
+  submitTemplatePR,
+});
 registerPreviewTransformTool(server, {});
 registerDiscoverTemplatesTool(server, deps.discovery);
 const pipelineDeps: PipelineDeps = { runExtraction, registerPipeline, findPipelineById, listPipelineDefs, recordMeasure };

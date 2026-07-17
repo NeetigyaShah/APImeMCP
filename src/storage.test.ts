@@ -7,6 +7,9 @@ import {
   loadManifest,
   saveManifest,
   registerTemplate,
+  saveRecording,
+  loadRecording,
+  listRecordings,
   findTemplateById,
   findTemplateByUrl,
 } from './storage.js';
@@ -162,5 +165,36 @@ describe('findTemplateByUrl', () => {
       },
     };
     expect(findTemplateByUrl(collidingManifest, 'https://bernhardt.com/shop')?.templateId).toBe('second');
+  });
+});
+
+describe('recording persistence', () => {
+  it('round-trips a recording under templates/recordings', async () => {
+    const recording = {
+      id: '00000000-0000-4000-8000-000000000001',
+      trace: { targetUrl: 'https://example.com', steps: [{ kind: 'extract' as const, selector: 'h1', field: 'title' }] },
+      createdAt: '2026-07-17T00:00:00.000Z',
+      crystallizedTemplateId: 'example-title',
+    };
+
+    await saveRecording(recording);
+
+    expect(await loadRecording(recording.id)).toEqual(recording);
+    await expect(fs.readFile(path.join(tmpDir, 'templates', 'recordings', `${recording.id}.json`), 'utf8')).resolves.toContain('example-title');
+  });
+
+  it('lists recordings in creation order without temp files', async () => {
+    await Promise.all([
+      saveRecording({ id: 'rec-b', trace: { targetUrl: 'https://b.example', steps: [{ kind: 'extract', selector: 'h1', field: 'title' }] }, createdAt: '2026-07-17T00:00:02.000Z' }),
+      saveRecording({ id: 'rec-a', trace: { targetUrl: 'https://a.example', steps: [{ kind: 'extract', selector: 'h1', field: 'title' }] }, createdAt: '2026-07-17T00:00:01.000Z' }),
+    ]);
+
+    expect((await listRecordings()).map((recording) => recording.id)).toEqual(['rec-a', 'rec-b']);
+    const files = await fs.readdir(path.join(tmpDir, 'templates', 'recordings'));
+    expect(files.every((file) => !file.includes('.tmp-'))).toBe(true);
+  });
+
+  it('returns null for a missing recording', async () => {
+    await expect(loadRecording('missing-recording')).resolves.toBeNull();
   });
 });

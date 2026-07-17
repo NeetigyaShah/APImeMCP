@@ -481,17 +481,47 @@ Accepts `{ receipt }`, where `receipt` is the `provenance` object returned by a 
 
 ### `synthesize_schema`
 
-Render an unmapped page for agent-authored extraction work. It returns the page HTML,
-a forensic screenshot path, DOM snapshot path, console errors, resolved URL, and a
-next-step hint. Write an extraction script from the returned HTML, dry-run it with
-`execute_native_extraction` using `targetUrl` and `executableScript`, then persist
-the verified script with `register_extraction_template`.
+Render an unmapped page for agent-authored extraction work, or crystallize a solved
+computer-use recording into a deterministic template. With only `targetUrl`, it
+returns page HTML, a forensic screenshot path, resolved URL, and a next-step hint.
+With `script` or `recording`, it dry-runs through the same extraction path, registers
+the verified template by default, and can optionally open a registry PR with
+`autoPr: true` and `githubToken`.
 
 | field | type | notes |
 |---|---|---|
 | `targetUrl` | string | absolute URL to render |
 | `cookieString` | string, optional | session cookies to use for this render only |
 | `proxyUrl` | string, optional | Playwright context proxy URL |
+| `script` | string, optional | extraction script to dry-run and register |
+| `recording` | object, optional | computer-use `ActionTrace` (`goto`/`fill`/`click`/`waitFor`/`extract`) to crystallize; mutually exclusive with `script` |
+| `templateId` | string, optional | kebab-case template ID; defaults from the target URL |
+| `domainPattern` | string, optional | domain to register; defaults from the target URL host |
+| `outputSchema` | JSON Schema object, optional | persisted on the manifest entry after a successful dry-run |
+| `register` | boolean, optional | defaults `true`; set `false` for dry-run-only script generation |
+| `autoPr` | boolean, optional | defaults `false`; when `true`, opens a review-required registry PR and never merges it |
+| `githubToken` | string, optional | required only when `autoPr` is `true` |
+
+The `recording` shape is:
+
+```json
+{
+  "targetUrl": "https://example.com/catalog",
+  "steps": [
+    { "kind": "goto", "url": "https://example.com/catalog" },
+    { "kind": "fill", "selector": "#part", "value": "ABC-123", "label": "Part number" },
+    { "kind": "click", "selector": "#search", "label": "Search" },
+    { "kind": "waitFor", "selector": "[data-price]" },
+    { "kind": "extract", "selector": "[data-price]", "field": "price", "attr": "text" }
+  ],
+  "outputSchema": { "type": "object" }
+}
+```
+
+If `findTemplateByUrl` already resolves the target, `synthesize_schema` short-circuits
+with a "template exists" response instead of registering a duplicate. Secret-looking
+fill fields such as password/token/session inputs are rejected before template
+generation; use `connect_app` for authenticated browser state.
 
 ### `request_template_heal`
 
