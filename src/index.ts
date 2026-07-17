@@ -4,10 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { ensureStorageInitialized, findTemplateById, findTemplateByUrl, loadManifest, registerTemplate } from './storage.js';
+import { ensureStorageInitialized, findTemplateById, findTemplateByUrl, loadManifest, registerTemplate, atomicWriteFile } from './storage.js';
 import { closeBrowser, confirmOpenAppConnection, createSuccessfulExtractionResult, executeActionSequence, executeExtraction, executeMeasured, initBrowser, isBrowserReady, openAppConnection, REGISTRY_CDN_ALLOWLIST, renderPage, startConfiguredAppConnections } from './engine.js';
 import { getSavedCookies, saveCookies } from './cookie-store.js';
-import { addFromRegistry, fetchRegistryManifest } from './registry-client.js';
+import { addFromRegistry, fetchRegistryManifest, openTemplatePr } from './registry-client.js';
 import { addCommunityTemplateCore } from './tools/add-community-template.js';
 import { batchDownload } from './downloader.js';
 import { getAllSla, preExecutionMeasure, recordMeasure } from './metrics.js';
@@ -34,6 +34,10 @@ import { registerPreviewTransformTool } from './tools/transform-tool.js';
 import { registerDiscoverTemplatesTool } from './discovery.js';
 import { findPipelineById, listPipelineDefs, registerPipeline, registerRegisterPipelineTool, registerRunPipelineTool, registerListPipelinesTool } from './pipeline.js';
 import type { PipelineDeps } from './pipeline.js';
+import { withLock } from './lock.js';
+import { captureHealForensics, listPendingHeals, openHealRegistryPr, readHealTicket, updateHealTicketStatus, verifyHealSubmission, writeHealTicket } from './self-heal.js';
+import { registerListPendingHealsTool, registerRequestTemplateHealTool, registerSubmitTemplateHealTool } from './tools/heal-tools.js';
+import type { HealToolsDeps } from './tools/heal-tools.js';
 
 let updateStatus: UpdateStatus = { updateAvailable: false, latestCommit: null };
 
@@ -111,6 +115,43 @@ const deps: ToolDeps = {
   logError,
 };
 
+const healCoreDeps = {
+  loadManifest,
+  findTemplateById,
+  readFile: fs.readFile,
+  resolvePath: path.resolve,
+  captureForensics: async (targetUrl: string) => {
+    const page = await renderPage(targetUrl);
+    return {
+      capturedAt: page.capturedAt,
+      domSnapshotPath: page.domSnapshotPath,
+      screenshotPath: page.screenshotPath,
+      consoleErrors: page.consoleErrors,
+    };
+  },
+  runExtraction: async (targetUrl: string, templateId?: string, executableScript?: string) => {
+    if (executableScript !== undefined) {
+      return runExtraction(targetUrl, undefined, undefined, undefined, true, undefined, undefined, undefined, executableScript);
+    }
+    return runExtraction(targetUrl, templateId, undefined, undefined, true, undefined, undefined, undefined, undefined, undefined, undefined, 'check');
+  },
+  atomicWriteFile,
+  withLock,
+  openTemplatePr,
+};
+
+const healDeps: HealToolsDeps = {
+  captureHealForensics: (templateId) => captureHealForensics(templateId, healCoreDeps),
+  writeHealTicket: (forensics) => writeHealTicket(forensics, healCoreDeps),
+  readHealTicket: (ticketId) => readHealTicket(ticketId, healCoreDeps),
+  verifyHealSubmission: (ticket, newScript) => verifyHealSubmission(ticket, newScript, healCoreDeps),
+  openHealRegistryPr: (templateId, newScript, ticket, dryRunOutput) => openHealRegistryPr(templateId, newScript, ticket, dryRunOutput, healCoreDeps),
+  updateHealTicketStatus: (ticketId, status) => updateHealTicketStatus(ticketId, status, healCoreDeps),
+  listPendingHeals: () => listPendingHeals(healCoreDeps),
+  log,
+  logError,
+};
+
 registerRegisterExtractionTemplateTool(server, deps);
 registerExecuteNativeExtractionTool(server, deps);
 registerConnectAppTool(server, deps);
@@ -129,6 +170,9 @@ const pipelineDeps: PipelineDeps = { runExtraction, registerPipeline, findPipeli
 registerRegisterPipelineTool(server, pipelineDeps);
 registerRunPipelineTool(server, pipelineDeps);
 registerListPipelinesTool(server, pipelineDeps);
+registerRequestTemplateHealTool(server, healDeps);
+registerSubmitTemplateHealTool(server, healDeps);
+registerListPendingHealsTool(server, healDeps);
 
 server.registerPrompt('get_environment_context', {
   title: 'Environment Context',

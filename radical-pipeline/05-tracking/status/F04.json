@@ -1,23 +1,23 @@
 {
   "id": "F04",
   "subtasks": {
-    "S0": "Todo",
-    "S1": "Todo",
-    "S2": "Todo",
-    "S3": "Todo",
-    "S4": "Todo",
-    "S5": "Todo",
-    "S6": "Todo",
-    "S7": "Todo",
-    "S8": "Todo",
+    "S0": "Done",
+    "S1": "Done",
+    "S2": "Done",
+    "S3": "Done",
+    "S4": "Done",
+    "S5": "Done",
+    "S6": "Done",
+    "S7": "Done",
+    "S8": "Done",
     "S9": "Done",
-    "S10": "Todo",
-    "S11": "Todo"
+    "S10": "Done",
+    "S11": "Done"
   },
-  "overall": "In-Progress",
-  "currentGate": "G3",
+  "overall": "Done",
+  "currentGate": "G7",
   "blockedBy": null,
-  "owner": null,
-  "reviewer": "codex-f04-g2-reviewer",
-  "updatedAt": "2026-07-17T13:53:48.545Z"
+  "owner": "codex",
+  "reviewer": "claude-f04-g4-security-reviewer",
+  "updatedAt": "2026-07-17T14:04:18.000Z"
 }

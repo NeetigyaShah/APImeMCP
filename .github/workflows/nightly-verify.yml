@@ -31,6 +31,8 @@ jobs:
       - run: npm run build
       - name: Verify registry templates
         run: node scripts/verify-registry.mjs --out .verify-badges ${{ inputs.templateId && format('--only {0}', inputs.templateId) || '' }}
+      - name: Prepare self-heal tickets
+        run: node scripts/self-heal.mjs --badges .verify-badges ${{ inputs.templateId && format('--only {0}', inputs.templateId) || '' }}
       - name: Publish badges to the templates registry
         env:
           GH_TOKEN: ${{ secrets.TEMPLATES_REPO_TOKEN }}

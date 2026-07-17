@@ -223,7 +223,7 @@ function assertJsonSerializable(value: unknown): unknown {
   }
 }
 
-interface ForensicPaths {
+export interface ForensicPaths {
   screenshotPath: string;
   domPath: string;
   html: string;
@@ -237,7 +237,7 @@ function createBrowserContext(proxyUrl?: string): Promise<BrowserContext> {
   });
 }
 
-async function captureForensics(page: Page): Promise<ForensicPaths> {
+export async function captureForensics(page: Page): Promise<ForensicPaths> {
   const logsDir = path.join('output', 'logs');
   await fs.mkdir(logsDir, { recursive: true });
   const prefix = `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`;
@@ -252,6 +252,8 @@ async function captureForensics(page: Page): Promise<ForensicPaths> {
 export interface PageForensics {
   html: string;
   screenshotPath?: string;
+  domSnapshotPath?: string;
+  consoleErrors: string[];
   url: string;
   capturedAt: string;
 }
@@ -266,10 +268,14 @@ export async function renderPage(
       await context.addCookies(parseCookieString(opts.cookieString, targetUrl));
     }
     const page = await context.newPage();
+    const consoleErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(message.text());
+    });
     try {
       await page.goto(targetUrl, { timeout: NAVIGATION_TIMEOUT_MS, waitUntil: DEFAULT_WAIT_STRATEGY });
-      const { html, screenshotPath } = await captureForensics(page);
-      return { html, screenshotPath, url: page.url(), capturedAt: new Date().toISOString() };
+      const { html, screenshotPath, domPath } = await captureForensics(page);
+      return { html, screenshotPath, domSnapshotPath: domPath, consoleErrors, url: page.url(), capturedAt: new Date().toISOString() };
     } finally {
       await page.close().catch(() => undefined);
     }

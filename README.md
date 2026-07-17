@@ -130,6 +130,26 @@ Green means the last scheduled run passed, red means it failed, and grey means t
 template has no fixed target and cannot be verified unattended. Registry contributors
 can run `apimemcp-verify-registry --only <templateId> --dry-run` in template PR CI.
 
+## Self-healing templates
+
+When a fixed-target template drifts, call `request_template_heal` to capture the
+DOM snapshot, screenshot, console errors, old script, and drift diff into a local
+ticket under `templates/heal-tickets/`. Then submit a corrected script with
+`submit_template_heal`; APImeMCP dry-runs it, validates the declared
+`outputSchema`, and only then opens a registry PR branch. It never auto-merges and
+invalid submissions leave the ticket pending for another attempt.
+
+Nightly verification can prepare tickets automatically after red badges are
+written:
+
+```bash
+node scripts/self-heal.mjs --badges .verify-badges
+```
+
+For local registry-branch verification, set `APIMEMCP_REGISTRY_REPO_PATH` to a
+local clone or bare repo. For GitHub PR creation, set a GitHub token plus optional
+`APIMEMCP_REGISTRY_GITHUB_REPO` and `APIMEMCP_REGISTRY_DEFAULT_BRANCH`.
+
 ## Connected app profiles (no manual cookie extraction)
 
 For sites that require login, use a persistent browser profile instead of copying
@@ -453,16 +473,52 @@ content. See "Recorder extension" above.
 ### `synthesize_schema`
 
 Render an unmapped page for agent-authored extraction work. It returns the page HTML,
-a forensic screenshot path, resolved URL, and a next-step hint. Write an extraction
-script from the returned HTML, dry-run it with `execute_native_extraction` using
-`targetUrl` and `executableScript`, then persist the verified script with
-`register_extraction_template`.
+a forensic screenshot path, DOM snapshot path, console errors, resolved URL, and a
+next-step hint. Write an extraction script from the returned HTML, dry-run it with
+`execute_native_extraction` using `targetUrl` and `executableScript`, then persist
+the verified script with `register_extraction_template`.
 
 | field | type | notes |
 |---|---|---|
 | `targetUrl` | string | absolute URL to render |
 | `cookieString` | string, optional | session cookies to use for this render only |
 | `proxyUrl` | string, optional | Playwright context proxy URL |
+
+### `request_template_heal`
+
+Create a local heal ticket for a fixed-target template. The server renders the
+current target page, captures forensic paths, includes the old script, and attaches
+the latest drift report from a live run.
+
+| field | type | notes |
+|---|---|---|
+| `templateId` | string | registered fixed-target template to inspect |
+
+Returns `{ ticketId, forensics }`. The ticket is stored locally under
+`templates/heal-tickets/`; forensic DOM/screenshot files are local paths and are
+not committed to registry PRs.
+
+### `submit_template_heal`
+
+Dry-run a corrected script for a heal ticket and open a registry PR only if the
+run succeeds and `outputSchema` validation passes.
+
+| field | type | notes |
+|---|---|---|
+| `templateId` | string | template being healed |
+| `ticketId` | string | ticket returned by `request_template_heal` |
+| `newScript` | string | corrected extraction script, capped at 100KB |
+| `notes` | string, optional | caller notes; retained for client-side context |
+
+Returns `HealResult`. Invalid submissions return `valid:false` and keep the
+ticket `pending`; valid submissions return `valid:true`, `prUrl`, and `branch`,
+and mark the ticket `pr-opened`.
+
+### `list_pending_heals`
+
+No input. Returns ticket summaries only:
+`{ id, templateId, status, createdAt }[]`. It intentionally omits forensic blobs
+and old script text so callers can poll status without reloading large artifacts.
 
 ### `batch_download_assets`
 

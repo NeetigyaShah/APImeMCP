@@ -229,6 +229,38 @@ export interface ExtractionResult {
   drift?: DriftReport;
 }
 
+export interface HealForensics {
+  templateId: string;
+  capturedAt: string;
+  targetUrl: string;
+  domSnapshotPath: string;
+  screenshotPath: string;
+  consoleErrors: string[];
+  oldScript: string;
+  driftDiff: DriftReport;
+  outputSchema?: Record<string, unknown>;
+}
+
+export type HealStatus = 'pending' | 'submitted' | 'pr-opened' | 'rejected';
+
+export interface HealTicket {
+  id: string;
+  templateId: string;
+  status: HealStatus;
+  forensics: HealForensics;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HealResult {
+  valid: boolean;
+  validationErrors?: ValidationResult['errors'];
+  dryRunOutput?: unknown;
+  prUrl?: string;
+  branch?: string;
+  rejectedReason?: string;
+}
+
 export const RunKindSchema = z.enum(['extraction', 'action-sequence', 'static-http', 'pipeline']);
 export type RunKind = z.infer<typeof RunKindSchema>;
 

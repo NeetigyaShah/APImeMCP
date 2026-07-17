@@ -72,6 +72,9 @@ apply the same judgment here you'd apply to writing that code by hand.
 | `add_community_template` | `domain` | Pulls a pre-verified template from the public [apimemcp-templates](https://github.com/NeetigyaShah/APImeMCP-Templates) registry (a plain git repo, no server) and registers it locally — check this **before** writing a new template by hand for a well-known site; someone may have already contributed one. Registry templates run with a network allowlist (own domain + a small CDN allowlist) enforced automatically. |
 | `registry CI` | `apimemcp add <domain>` | The CLI uses the same community-template path as MCP. Registry contributions require a declared network allowlist, are linted in CI, and have live network behavior checked nightly. |
 | `discover_templates` | `domain`, `limit?`, `source?` | Searches local templates and/or the community registry with explainable lexical scores. Call this before synthesizing or recording a template; use `source: 'local'` when network access is unavailable. |
+| `request_template_heal` | `templateId` | Captures a local heal ticket for a fixed-target template: DOM snapshot path, screenshot path, console errors, old script, drift diff, and output schema. Use when drift/schema validation indicates a template broke. |
+| `submit_template_heal` | `templateId`, `ticketId`, `newScript`, `notes?` | Dry-runs the proposed script and validates it against the template's `outputSchema`; opens a registry PR branch only when valid. Invalid submissions keep the ticket pending and create no branch/PR. |
+| `list_pending_heals` | none | Lists heal-ticket summaries `{id, templateId, status, createdAt}` without forensic blobs or script text. Use this after nightly self-heal or after a rejected submission. |
 | `batch_download_assets` | `urls: string[]`, `outputDir` | Concurrency-limited (5 at a time). Use for "download the images" rather than a hand-rolled fetch loop. |
 | `schedule_stock_check` | `targetUrl`, `cronExpression` (5-field only), `templateId?` | Persists across restarts. |
 | `get_extraction_stats` | none | Totals, recent domains, last run — read this instead of re-deriving from raw files. |
@@ -118,6 +121,7 @@ reuse it. This read-only lookup never opens a browser or reads cookies.
   standalone `apis/<id>.mjs` (only needs Playwright), each with a generated docs page
   at `/docs/<id>`.
 - **Scheduling, metrics, notifications** — cron re-runs, run stats, webhook pings.
+- **Self-healing handoff** — drifted fixed-target templates can produce local forensics tickets; a calling agent supplies the fix, APImeMCP dry-runs/schema-validates it, and the registry client opens a PR branch. The server never calls an LLM for the fix and never auto-merges.
 
 ## Connected app profiles
 
