@@ -12,6 +12,8 @@
 - F00 is marked `Blocked` at G6. A fresh builder owns the focused verifier repair.
 - G6 repair worker `019f6e48-6903-7082-97f5-3169ed9193f1` disappeared without a handoff after the interrupted turn; replacement required.
 - Replacement G6 builder repaired the fixture submission, passed `node scripts/verify-F00.mjs`, `npm run build`, and `npm test`, updated F00 to G7, and committed `ecb0abe`.
+- G7 passed: F00 rebased as `cecf7b6`, merged to `integration`, and tracker finalization committed as `5aca9a2`. Merge-result validation passed `npm run build` and `npm test` (64 tests).
+- Promotion policy: eligible Program 1 features run in isolated worktrees and merge only to `integration`; `master` is held until the complete engine build is green.
 
 ## Agent Failures
 
