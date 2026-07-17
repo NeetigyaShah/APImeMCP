@@ -27,7 +27,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "vitest run",
+    "test": "vitest run --exclude=.claude/worktrees/**",
     "prepublishOnly": "npm run build",
     "postinstall": "playwright install chromium || true"
   },

@@ -30,6 +30,9 @@
 - F22 G2 rejected `9109a2d`: its discovery registration passes an inline dependency object instead of appending dependencies to the single shared `deps` object, violating ADR-02. A fresh F22 repair builder is required.
 - Sequencing note: F05 and F03 merged before blocked F01, despite the DAG's preferred Wave 1 foundation order. Neither declares a hard F01 dependency and both merge-result gates passed; F01 remains the next required Wave 1 foundation before F14/F19 integration. F22 is Wave 2 and remains unmerged pending F02.
 - F22 re-review rejected `b5053ec`: it repaired the shared dependency object but rewrote three existing registrations. ADR-02 requires the discovery registration to be the only appended call. A fresh narrow repair is queued; F22 remains held for Wave 2.
+- F14's first repair still omitted unmatched-domain and no-input measures because their empty template IDs were invalid under the measure schema. Its second repair uses schema-valid synthetic IDs and awaits its final integration gate.
+- F19 G2 rejected `c81d721`: wildcard allowlists were not fail-closed, the lint workflow could no-op, the full suite had a malformed-test syntax error, and the nightly token was job-wide during untrusted template execution. A fresh security repair is in progress.
+- F01 integrated at `7b3d19f` with build and all F01/F03/F05 verifiers passing. Its root `npm test` was polluted by an unmerged F19 worktree test. The test command now excludes `.claude/worktrees/**`, preserving isolation between parallel feature branches and integration gates.
 
 ## Agent Failures
 
