@@ -14,10 +14,10 @@
     "S10": "Done",
     "S11": "Done"
   },
-  "overall": "Done",
-  "currentGate": "G7",
-  "blockedBy": null,
+  "overall": "Blocked",
+  "currentGate": "G3",
+  "blockedBy": "G3 failed: pipeline tool handlers hide registerPipeline/listPipelineDefs/recordMeasure imports instead of receiving explicit ADR-02 deps",
   "owner": null,
   "reviewer": "codex-f07-gate-reviewer",
-  "updatedAt": "2026-07-17T12:50:53.633Z"
+  "updatedAt": "2026-07-17T12:58:06.070Z"
 }
