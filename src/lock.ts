@@ -12,9 +12,17 @@ export function withLock<T>(keyOrFn: string | (() => Promise<T>), maybeFn?: () =
   const fn = typeof keyOrFn === 'function' ? keyOrFn : maybeFn!;
   const queue = queues.get(key) ?? Promise.resolve();
   const result = queue.then(fn, fn);
-  queues.set(key, result.then(
+  const nextQueue = result.then(
     () => undefined,
     () => undefined
-  ));
+  );
+  queues.set(key, nextQueue);
+  void nextQueue.then(() => {
+    if (queues.get(key) === nextQueue) queues.delete(key);
+  });
   return result;
+}
+
+export function getLockQueueSize(): number {
+  return queues.size;
 }

@@ -15,9 +15,9 @@
     "S11": "Done"
   },
   "overall": "In-Progress",
-  "currentGate": "G4",
+  "currentGate": "G5",
   "blockedBy": null,
   "owner": "feat/F16-result-cache",
   "reviewer": null,
-  "updatedAt": "2026-07-17T10:16:56.118Z"
+  "updatedAt": "2026-07-17T10:25:53.590Z"
 }
