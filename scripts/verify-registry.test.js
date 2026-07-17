@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeBadge, parseArgs, verifyEntries } from './verify-registry.mjs';
+import { computeBadge, parseArgs, verifyEntries } from './verify-registry-core.js';
 
 describe('computeBadge', () => {
   it('marks successful verification as passing', () => {

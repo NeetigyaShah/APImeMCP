@@ -14,6 +14,7 @@
   "files": [
     "dist/**/*.js",
     "scripts/verify-registry.mjs",
+    "scripts/verify-registry-core.js",
     "skills/**"
   ],
   "repository": {
