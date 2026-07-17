@@ -40,6 +40,7 @@ import { registerListPendingHealsTool, registerRequestTemplateHealTool, register
 import type { HealToolsDeps } from './tools/heal-tools.js';
 import { buildReceipt, exportPublicKey, registerGetPublicKeyTool, registerVerifyReceiptTool, verifyReceipt } from './provenance.js';
 import { initOtelAdapter } from './otel-adapter.js';
+import { registerSetVaultSecretTool, registerListVaultSecretsTool, registerDeleteVaultSecretTool } from './vault.js';
 
 let updateStatus: UpdateStatus = { updateAvailable: false, latestCommit: null };
 
@@ -188,6 +189,9 @@ registerSubmitTemplateHealTool(server, healDeps);
 registerListPendingHealsTool(server, healDeps);
 registerGetPublicKeyTool(server, { exportPublicKey });
 registerVerifyReceiptTool(server, { exportPublicKey, verifyReceipt });
+registerSetVaultSecretTool(server, deps);
+registerListVaultSecretsTool(server, deps);
+registerDeleteVaultSecretTool(server, deps);
 
 server.registerPrompt('get_environment_context', {
   title: 'Environment Context',

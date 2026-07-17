@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vault Login Fixture</title>
+</head>
+<body>
+    <h1>Vault Login Fixture</h1>
+    <form id="login-form">
+        <div>
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required>
+        </div>
+        <div>
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+        <button type="submit">Log in</button>
+    </form>
+    <div id="status" style="margin-top: 20px; display: none;">
+        <!-- Populated by JavaScript on successful login -->
+    </div>
+    <script>
+        document.getElementById('login-form').addEventListener('submit', (event) => {
+            event.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            // Verify credentials
+            if (username === 'verify-user' && password === 'verify-pass') {
+                document.getElementById('login-form').style.display = 'none';
+                document.getElementById('status').textContent = `Logged in as ${username}`;
+                document.getElementById('status').style.display = 'block';
+            } else {
+                alert('Invalid credentials');
+            }
+        });
+    </script>
+</body>
+</html>

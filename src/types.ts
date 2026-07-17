@@ -7,6 +7,26 @@ import type { TransformSpec } from './transform.js';
 
 export type { ValidationResult } from './schema.js';
 
+// Vault types (F13)
+export const VaultEntrySchema = z.object({
+  id: z.string().min(1),
+  label: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  algo: z.literal('aes-256-gcm'),
+  iv: z.string(),
+  authTag: z.string(),
+  ciphertext: z.string(),
+  keyId: z.string(),
+});
+export type VaultEntry = z.infer<typeof VaultEntrySchema>;
+
+export const VaultStoreSchema = z.object({
+  version: z.literal(1),
+  entries: z.record(VaultEntrySchema),
+});
+export type VaultStore = z.infer<typeof VaultStoreSchema>;
+
 const TEMPLATE_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 const TemplateIdSchema = z
@@ -53,6 +73,10 @@ export const RegisterExtractionTemplateShape = {
   readySelector: z.string().optional(),
   outputSchema: z.record(z.unknown()).optional(),
   transform: TransformSpecSchema.optional(),
+  // F13: maps script-visible field names to vault entry ids or subkeys (e.g.,
+  // { username: "vault-id.username", password: "vault-id.password" }). Resolved and
+  // injected at run time, never persisted or logged in cleartext (see engine.ts).
+  secretInputs: z.record(z.string()).optional(),
 };
 
 export const RegisterExtractionTemplateInputSchema = z.object(RegisterExtractionTemplateShape);
@@ -227,6 +251,10 @@ export interface ManifestEntry {
   readySelector?: string;
   outputSchema?: Record<string, unknown>;
   transform?: TransformSpec;
+  // F13: Vault secret references. Maps field names to vault entry ids or subkeys (e.g.,
+  // { username: "vault-id.username", password: "vault-id.password" }). Absent means no
+  // vault involvement for this template.
+  secretInputs?: Record<string, string>;
   // System-assigned, NOT part of the public register_extraction_template tool's input
   // schema (a caller can't just claim 'local' to escape the sandbox) - set only by
   // registry-client.ts's addFromRegistry(). 'registry' templates get a network
