@@ -3,6 +3,7 @@ import type { ExecuteActionSequenceOptions, ExecuteExtractionOptions } from '../
 import { checkDrift } from '../drift.js';
 import type { DriftReport } from '../drift.js';
 import { applyTransform } from '../transform.js';
+import { withResultCache } from '../result-cache.js';
 
 export interface ExtractionRunnerDeps {
   loadManifest: () => Promise<Manifest>;
@@ -114,27 +115,34 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
 
       if (!connectionId && cookieString) await deps.saveCookies(entry.templateId, cookieString);
       const effectiveCookies = connectionId ? undefined : cookieString || (useSavedCookies ? await deps.getSavedCookies(entry.templateId) : undefined);
-      measurementStarted = true;
-      let drift: DriftReport | undefined;
-      const data = await deps.executeMeasured(measure, () => deps.executeExtraction({
-        targetUrl: resolvedUrl,
-        scriptPath: entry.scriptPath,
-        proxyUrl,
-        cookieString: effectiveCookies,
-        connectionId,
-        simulateLowBandwidth: simulateLowBandwidth ?? true,
-        waitStrategy: entry.waitStrategy,
-        readySelector: entry.readySelector,
-        networkAllowlist: entry.source === 'registry' ? entry.allowedDomains ?? [] : undefined,
-        onNetworkRequest,
-      }), (result) => {
-        if (!entry.outputSchema) return undefined;
-        drift = checkDrift(entry.templateId, entry.outputSchema, result);
-        return { driftDetected: drift.hasDrift, driftEntryCount: drift.entries.length, driftEntries: drift.entries };
-      });
-      await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
-      const transformedData = entry.transform ? applyTransform(data, entry.transform) : data;
-      return deps.createSuccessfulResult(transformedData, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema, drift);
+      const run = async () => {
+        measurementStarted = true;
+        let drift: DriftReport | undefined;
+        const data = await deps.executeMeasured(measure, () => deps.executeExtraction({
+          targetUrl: resolvedUrl,
+          scriptPath: entry.scriptPath,
+          proxyUrl,
+          cookieString: effectiveCookies,
+          connectionId,
+          simulateLowBandwidth: simulateLowBandwidth ?? true,
+          waitStrategy: entry.waitStrategy,
+          readySelector: entry.readySelector,
+          networkAllowlist: entry.source === 'registry' ? entry.allowedDomains ?? [] : undefined,
+          onNetworkRequest,
+        }), (result) => {
+          if (!entry.outputSchema) return undefined;
+          drift = checkDrift(entry.templateId, entry.outputSchema, result);
+          return { driftDetected: drift.hasDrift, driftEntryCount: drift.entries.length, driftEntries: drift.entries };
+        });
+        await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
+        const transformedData = entry.transform ? applyTransform(data, entry.transform) : data;
+        return deps.createSuccessfulResult(transformedData, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema, drift);
+      };
+      if (connectionId) return run();
+      return await withResultCache(
+        { templateId: entry.templateId, targetUrl: resolvedUrl, cookieString: effectiveCookies, proxyUrl },
+        run,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!measurementStarted) {

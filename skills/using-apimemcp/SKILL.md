@@ -84,6 +84,11 @@ Resource `status://server` and dashboard `http://127.0.0.1:3000` (if running) ex
 the same data for inspection — check `status://server` before assuming the browser
 isn't ready.
 
+Successful extraction results are transparently reused within the server's
+short in-process cache. The cache is isolated by template, URL, cookie identity,
+and proxy, and never applies to action-sequence templates; no agent-facing API
+change is needed.
+
 ## What this server can do (capabilities)
 
 - **Extraction APIs** — register a per-domain script, run it deterministically; returns JSON.

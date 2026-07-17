@@ -62,6 +62,15 @@ npm run build
 npm start
 ```
 
+### Result cache configuration
+
+Successful extraction results are cached in-process for a short TTL. The cache
+is transparent to clients, never applies to action-sequence templates, and is
+cleared when the server restarts. Configure it with:
+
+- `APIMEMCP_CACHE_TTL_MS` — entry lifetime in milliseconds (default `60000`).
+- `APIMEMCP_CACHE_MAX_ENTRIES` — maximum entries retained (default `500`).
+
 The server communicates over stdio — it's meant to be spawned by an MCP client, not
 run interactively.
 

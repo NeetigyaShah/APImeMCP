@@ -1,23 +1,23 @@
 {
   "id": "F16",
   "subtasks": {
-    "S0": "Todo",
-    "S1": "Todo",
+    "S0": "Done",
+    "S1": "Done",
     "S2": "Todo",
-    "S3": "Todo",
-    "S4": "Todo",
-    "S5": "Todo",
-    "S6": "Todo",
-    "S7": "N/A",
-    "S8": "Todo",
-    "S9": "Todo",
+    "S3": "Done",
+    "S4": "Done",
+    "S5": "Done",
+    "S6": "Done",
+    "S7": "In-Review",
+    "S8": "Done",
+    "S9": "Done",
     "S10": "N/A",
-    "S11": "Todo"
+    "S11": "Done"
   },
-  "overall": "Not-started",
-  "currentGate": null,
+  "overall": "In-Progress",
+  "currentGate": "G4",
   "blockedBy": null,
-  "owner": null,
+  "owner": "feat/F16-result-cache",
   "reviewer": null,
-  "updatedAt": ""
+  "updatedAt": "2026-07-17T10:06:20.562Z"
 }
