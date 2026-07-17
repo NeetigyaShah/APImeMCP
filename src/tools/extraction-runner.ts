@@ -1,6 +1,5 @@
 import type { ActionSequence, ExtractionResult, Manifest, ManifestEntry, RunKind } from '../types.js';
 import type { ExecuteActionSequenceOptions, ExecuteExtractionOptions } from '../engine.js';
-<<<<<<< HEAD
 import { checkDrift } from '../drift.js';
 import type { DriftReport } from '../drift.js';
 import { applyTransform } from '../transform.js';

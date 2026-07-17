@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import type { ValidationResult } from './schema.js';
-<<<<<<< HEAD
 import type { DriftEntry, DriftReport } from './drift.js';
 import { TransformSpecSchema } from './transform.js';
 import type { TransformSpec } from './transform.js';
