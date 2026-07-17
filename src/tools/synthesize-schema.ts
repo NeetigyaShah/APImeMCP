@@ -96,12 +96,15 @@ export function registerSynthesizeSchemaTool(server: McpServer, deps: Synthesize
       const effectiveOutputSchema = (outputSchema ?? parsedRecording?.outputSchema) as Record<string, unknown> | undefined;
 
       let recordingRecord: Recording | undefined;
+      let executableScript: string;
       if (parsedRecording) {
+        // Run secret check before saving recording to disk
+        executableScript = deps.crystallizeRecording(parsedRecording);
         recordingRecord = { id: randomUUID(), trace: parsedRecording, createdAt: new Date().toISOString() };
         await deps.saveRecording(recordingRecord);
+      } else {
+        executableScript = script!;
       }
-
-      const executableScript = parsedRecording ? deps.crystallizeRecording(parsedRecording) : script!;
       let data: unknown;
       try {
         data = await deps.executeExtraction({ targetUrl, executableScript, cookieString, proxyUrl });

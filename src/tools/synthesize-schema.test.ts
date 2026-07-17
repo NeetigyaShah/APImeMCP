@@ -108,8 +108,8 @@ describe('synthesize_schema tool', () => {
 
     expect(payload).toMatchObject({ success: true, templateId: 'example-product', prUrl: 'https://github.com/NeetigyaShah/APImeMCP-Templates/pull/1' });
     expect(calls.map((call) => Array.isArray(call) ? call[0] : call)).toEqual([
-      'saveRecording',
       'crystallizeRecording',
+      'saveRecording',
       'executeExtraction',
       'registerTemplate',
       'saveRecording',
