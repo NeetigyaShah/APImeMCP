@@ -1,0 +1,57 @@
+name: nightly registry verification
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      templateId:
+        description: Optional registry template ID to verify
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-registry-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      TEMPLATES_REPO_TOKEN: ${{ secrets.TEMPLATES_REPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Verify registry templates
+        run: node scripts/verify-registry.mjs --out .verify-badges ${{ inputs.templateId && format('--only {0}', inputs.templateId) || '' }}
+      - name: Publish badges to the templates registry
+        if: env.TEMPLATES_REPO_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.TEMPLATES_REPO_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/NeetigyaShah/APImeMCP-Templates.git" templates-registry
+          mkdir -p templates-registry/badges
+          cp .verify-badges/*.json templates-registry/badges/
+          cd templates-registry
+          git config user.name "apimemcp-verifier[bot]"
+          git config user.email "apimemcp-verifier[bot]@users.noreply.github.com"
+          git add badges
+          if git diff --cached --quiet; then
+            echo "No badge changes to publish"
+          else
+            git commit -m "chore: update nightly verification badges"
+            git push origin main
+          fi
+      - name: Skip badge publication without token
+        if: env.TEMPLATES_REPO_TOKEN == ''
+        run: echo "TEMPLATES_REPO_TOKEN is unset; skipping badge publication."
+

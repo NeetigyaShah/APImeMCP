@@ -108,6 +108,9 @@ the server starts. The server never asks the agent to copy cookie values.
 
 ## Templates with no per-run input ("fixed-target")
 
+Fixed-target community templates are re-verified nightly; their Shields endpoint
+badge is published at `badges/<templateId>.json` in the templates registry.
+
 Some requests don't have a URL that varies per call — "get me today's top deals on
 Amazon" always hits the same deals page; there's nothing for a caller to supply.
 Register those with `fixedTargetUrl` set to that one page, and call

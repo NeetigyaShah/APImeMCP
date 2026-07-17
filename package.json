@@ -8,10 +8,12 @@
     "access": "public"
   },
   "bin": {
-    "apimemcp": "dist/index.js"
+    "apimemcp": "dist/index.js",
+    "apimemcp-verify-registry": "scripts/verify-registry.mjs"
   },
   "files": [
     "dist/**/*.js",
+    "scripts/verify-registry.mjs",
     "skills/**"
   ],
   "repository": {

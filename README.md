@@ -98,6 +98,19 @@ local write. Works from a fresh install with no existing `templates/` directory.
 See `add_community_template` under Tools for the MCP-tool equivalent, and the
 registry repo's own `CONTRIBUTING.md` to add a template.
 
+## Registry verification badges
+
+The registry re-verifies fixed-target community templates nightly. Each template's
+published badge is available through Shields' endpoint service:
+
+```text
+https://img.shields.io/endpoint?url=https://cdn.jsdelivr.net/gh/NeetigyaShah/APImeMCP-Templates@main/badges/<templateId>.json
+```
+
+Green means the last scheduled run passed, red means it failed, and grey means the
+template has no fixed target and cannot be verified unattended. Registry contributors
+can run `apimemcp-verify-registry --only <templateId> --dry-run` in template PR CI.
+
 ## Connected app profiles (no manual cookie extraction)
 
 For sites that require login, use a persistent browser profile instead of copying

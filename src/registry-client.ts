@@ -14,6 +14,19 @@ export async function fetchRegistryManifest(): Promise<Manifest> {
   return (await res.json()) as Manifest;
 }
 
+export function listVerifiable(manifest: Manifest): Array<[string, ManifestEntry]> {
+  return Object.entries(manifest).filter(([, entry]) => Boolean(entry.fixedTargetUrl));
+}
+
+export async function fetchRegistryTemplateSource(entry: ManifestEntry): Promise<string> {
+  const extension = entry.kind === 'action-sequence' ? 'json' : 'js';
+  const response = await fetch(`${REGISTRY_BASE}/${entry.templateId}.${extension}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch registry template "${entry.templateId}": HTTP ${response.status}`);
+  }
+  return response.text();
+}
+
 function normalizeDomain(domain: string): string {
   return domain
     .toLowerCase()
@@ -58,13 +71,15 @@ export async function addFromRegistry(domain: string): Promise<AddFromRegistryRe
     return { templateId: '', registered: false, error: `No registry template found for domain "${domain}"` };
   }
 
-  const isAction = entry.kind === 'action-sequence';
-  const scriptUrl = `${REGISTRY_BASE}/${entry.templateId}.${isAction ? 'json' : 'js'}`;
-  const scriptRes = await fetch(scriptUrl);
-  if (!scriptRes.ok) {
-    return { templateId: entry.templateId, registered: false, error: `Failed to download template file: HTTP ${scriptRes.status}` };
+  let contents: string;
+  try {
+    contents = await fetchRegistryTemplateSource(entry);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { templateId: entry.templateId, registered: false, error: message };
   }
-  const contents = await scriptRes.text();
+
+  const isAction = entry.kind === 'action-sequence';
 
   try {
     if (isAction) {
