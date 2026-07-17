@@ -145,4 +145,25 @@ describe('self-heal core', () => {
     );
     expect('mergeTemplatePr' in deps).toBe(false);
   });
+
+  it('minimizes dry-run output in PR bodies to avoid leaking sensitive values', async () => {
+    const deps = createDeps();
+    const ticket = await writeHealTicket(await captureHealForensics('fixture', deps), deps);
+
+    await openHealRegistryPr('fixture', '() => ({ title: "Fixed" })', ticket, {
+      title: 'Fixed',
+      secretToken: 'REDACT_ME_TOKEN_VALUE',
+      nested: { cookie: 'REDACT_ME_COOKIE_VALUE' },
+      longText: 'private-page-data'.repeat(100),
+    }, deps);
+
+    const body = vi.mocked(deps.openTemplatePr).mock.calls[0][3];
+    expect(body).toContain('Dry-run output summary:');
+    expect(body).toContain('Full dry-run output omitted');
+    expect(body).not.toContain('```json');
+    expect(body).not.toContain('"title": "Fixed"');
+    expect(body).not.toContain('REDACT_ME_TOKEN_VALUE');
+    expect(body).not.toContain('REDACT_ME_COOKIE_VALUE');
+    expect(body).not.toContain('private-page-data');
+  });
 });

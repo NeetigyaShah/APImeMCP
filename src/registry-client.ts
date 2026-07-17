@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { ActionSequence, Manifest, ManifestEntry } from './types.js';
 import { registerTemplate, registerActionSequenceTemplate } from './storage.js';
 
@@ -145,6 +145,24 @@ function runGit(args: string[], cwd: string): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 }
 
+const WINDOWS_DRIVE_PATH_RE = /^[A-Za-z]:[\\/]/;
+const URL_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+
+async function normalizeLocalRegistryRepo(repoPath: string): Promise<{ cloneSource: string; prUrlBase: string }> {
+  const rawPath = repoPath.trim();
+  if (!rawPath || rawPath.includes('\0')) throw new Error('APIMEMCP_REGISTRY_REPO_PATH must be a non-empty local path');
+  if (URL_SCHEME_RE.test(rawPath) && !rawPath.startsWith('file:') && !WINDOWS_DRIVE_PATH_RE.test(rawPath)) {
+    throw new Error('APIMEMCP_REGISTRY_REPO_PATH must be a local filesystem path or file:// URL');
+  }
+
+  const localPath = rawPath.startsWith('file:') ? fileURLToPath(rawPath) : path.resolve(rawPath);
+  const stats = await fs.stat(localPath);
+  if (!stats.isDirectory()) throw new Error(`APIMEMCP_REGISTRY_REPO_PATH is not a directory: ${localPath}`);
+
+  const fileUrl = pathToFileURL(localPath).href;
+  return { cloneSource: fileUrl, prUrlBase: fileUrl };
+}
+
 async function openLocalTemplatePr(
   templateId: string,
   branch: string,
@@ -153,10 +171,11 @@ async function openLocalTemplatePr(
 ): Promise<OpenTemplatePrResult> {
   const repoPath = process.env.APIMEMCP_REGISTRY_REPO_PATH;
   if (!repoPath) throw new Error('APIMEMCP_REGISTRY_REPO_PATH is required for local registry PR creation');
+  const localRepo = await normalizeLocalRegistryRepo(repoPath);
   const defaultBranch = process.env.APIMEMCP_REGISTRY_DEFAULT_BRANCH ?? 'main';
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'apimemcp-registry-pr-'));
   try {
-    runGit(['clone', repoPath, workDir], process.cwd());
+    runGit(['clone', localRepo.cloneSource, workDir], process.cwd());
     runGit(['config', 'user.name', 'apimemcp-self-heal[bot]'], workDir);
     runGit(['config', 'user.email', 'apimemcp-self-heal[bot]@users.noreply.github.com'], workDir);
     runGit(['checkout', '-B', branch, `origin/${defaultBranch}`], workDir);
@@ -180,7 +199,7 @@ async function openLocalTemplatePr(
     }
     if (hasChanges) runGit(['commit', '-m', `self-heal: update ${templateId}`, '-m', body], workDir);
     runGit(['push', 'origin', `HEAD:refs/heads/${branch}`], workDir);
-    return { prUrl: `${pathToFileURL(repoPath).href}#${branch}`, branch };
+    return { prUrl: `${localRepo.prUrlBase}#${branch}`, branch };
   } finally {
     await fs.rm(workDir, { recursive: true, force: true });
   }

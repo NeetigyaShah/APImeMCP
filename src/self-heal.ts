@@ -172,6 +172,58 @@ function safeBranchSuffix(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
+const SENSITIVE_OUTPUT_KEY_RE = /(authorization|cookie|password|secret|session|token|api[_-]?key)/i;
+
+function outputType(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
+function approximateJsonBytes(value: unknown): number | undefined {
+  const seen = new WeakSet<object>();
+  try {
+    return Buffer.byteLength(JSON.stringify(value, (_key, nestedValue) => {
+      if (typeof nestedValue === 'bigint') return '[bigint]';
+      if (typeof nestedValue === 'function') return '[function]';
+      if (typeof nestedValue === 'symbol') return '[symbol]';
+      if (typeof nestedValue === 'object' && nestedValue !== null) {
+        if (seen.has(nestedValue)) return '[circular]';
+        seen.add(nestedValue);
+      }
+      return nestedValue;
+    }), 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
+function summarizeTopLevelKeys(value: Record<string, unknown>): string | undefined {
+  const keys = Object.keys(value);
+  if (keys.length === 0) return undefined;
+  const visibleKeys = keys
+    .slice(0, 10)
+    .map((key) => SENSITIVE_OUTPUT_KEY_RE.test(key) ? '[redacted-sensitive-key]' : key);
+  const suffix = keys.length > visibleKeys.length ? `, … +${keys.length - visibleKeys.length} more` : '';
+  return `${visibleKeys.join(', ')}${suffix}`;
+}
+
+function summarizeDryRunOutput(dryRunOutput: unknown): string[] {
+  const type = outputType(dryRunOutput);
+  const lines = [`- Type: ${type}`];
+  if (typeof dryRunOutput === 'string') lines.push(`- String length: ${dryRunOutput.length}`);
+  if (Array.isArray(dryRunOutput)) lines.push(`- Array length: ${dryRunOutput.length}`);
+  if (type === 'object' && dryRunOutput !== null) {
+    const keys = summarizeTopLevelKeys(dryRunOutput as Record<string, unknown>);
+    lines.push(`- Top-level key count: ${Object.keys(dryRunOutput as Record<string, unknown>).length}`);
+    if (keys) lines.push(`- Top-level keys: ${keys}`);
+  }
+  const bytes = approximateJsonBytes(dryRunOutput);
+  if (bytes !== undefined) lines.push(`- Approximate JSON size: ${bytes} bytes`);
+  lines.push('- Full dry-run output omitted to avoid leaking page content, cookies, tokens, or other sensitive data.');
+  return lines;
+}
+
 function buildPrBody(ticket: HealTicket, dryRunOutput: unknown): string {
   return [
     `Self-heal submission for \`${ticket.templateId}\`.`,
@@ -186,10 +238,8 @@ function buildPrBody(ticket: HealTicket, dryRunOutput: unknown): string {
     `- DOM snapshot: ${ticket.forensics.domSnapshotPath}`,
     `- Screenshot: ${ticket.forensics.screenshotPath}`,
     '',
-    'Dry-run output preview:',
-    '```json',
-    JSON.stringify(dryRunOutput, null, 2),
-    '```',
+    'Dry-run output summary:',
+    ...summarizeDryRunOutput(dryRunOutput),
   ].join('\n');
 }
 

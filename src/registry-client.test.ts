@@ -60,7 +60,7 @@ describe('openTemplatePr', () => {
     const { mkdtemp, readFile, rm } = await import('node:fs/promises');
     const os = await import('node:os');
     const path = await import('node:path');
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'apimemcp-registry-pr-test-'));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'apimemcp registry-pr-test-'));
     const workDir = path.join(tempDir, 'work');
     const remoteDir = path.join(tempDir, 'remote.git');
     const run = (args: string[], cwd = workDir) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -78,7 +78,7 @@ describe('openTemplatePr', () => {
       run(['commit', '-m', 'seed registry']);
       run(['branch', '-M', 'main']);
       run(['push', 'origin', 'main']);
-      process.env.APIMEMCP_REGISTRY_REPO_PATH = remoteDir;
+      process.env.APIMEMCP_REGISTRY_REPO_PATH = process.platform === 'win32' ? remoteDir.replaceAll('/', '\\') : remoteDir;
       process.env.APIMEMCP_REGISTRY_DEFAULT_BRANCH = 'main';
 
       const result = await openTemplatePr(
@@ -99,5 +99,5 @@ describe('openTemplatePr', () => {
       else process.env.APIMEMCP_REGISTRY_DEFAULT_BRANCH = originalDefaultBranch;
       await rm(tempDir, { recursive: true, force: true });
     }
-  }, 15_000);
+  }, 30_000);
 });

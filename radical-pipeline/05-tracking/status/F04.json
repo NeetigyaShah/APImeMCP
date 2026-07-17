@@ -12,12 +12,12 @@
     "S8": "Done",
     "S9": "Done",
     "S10": "Done",
-    "S11": "Todo"
+    "S11": "In-Review"
   },
-  "overall": "Blocked",
+  "overall": "In-Progress",
   "currentGate": "G1",
-  "blockedBy": "G1 npm test fails in openTemplatePr local git clone on Windows; G6 verify-F04 fails at same local registry clone path; G4 review also finds PR body includes full dry-run output.",
+  "blockedBy": null,
   "owner": "codex",
-  "reviewer": "codex-gate-review",
-  "updatedAt": "2026-07-17T12:47:05.174Z"
+  "reviewer": null,
+  "updatedAt": "2026-07-17T13:16:33.184Z"
 }
