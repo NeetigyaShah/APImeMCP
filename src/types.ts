@@ -223,8 +223,44 @@ export interface ExtractionResult {
   drift?: DriftReport;
 }
 
-export const RunKindSchema = z.enum(['extraction', 'action-sequence', 'static-http']);
+export const RunKindSchema = z.enum(['extraction', 'action-sequence', 'static-http', 'pipeline']);
 export type RunKind = z.infer<typeof RunKindSchema>;
+
+export const PipelineStepSchema = z.object({
+  id: z.string().min(1),
+  templateId: TemplateIdSchema,
+  targetUrl: z.string().url().optional(),
+  cookieString: z.string().optional(),
+  proxyUrl: z.string().url().optional(),
+  inputMapping: z.record(z.string()).optional(),
+});
+export type PipelineStep = z.infer<typeof PipelineStepSchema>;
+
+export const PipelineDefSchema = z.object({
+  id: TemplateIdSchema,
+  name: z.string().min(1),
+  description: z.string().optional(),
+  steps: z.array(PipelineStepSchema).min(1),
+  createdAt: z.string().optional(),
+});
+export type PipelineDef = z.infer<typeof PipelineDefSchema>;
+
+export interface PipelineStepResult {
+  stepId: string;
+  templateId: string;
+  success: boolean;
+  output?: unknown;
+  error?: string;
+  durationMs: number;
+}
+
+export interface PipelineRunResult {
+  pipelineId: string;
+  success: boolean;
+  steps: PipelineStepResult[];
+  failedStep?: string;
+  totalDurationMs: number;
+}
 
 export const MeasureRecordSchema = z
   .object({

@@ -10,7 +10,7 @@ import { getSavedCookies, saveCookies } from './cookie-store.js';
 import { addFromRegistry, fetchRegistryManifest } from './registry-client.js';
 import { addCommunityTemplateCore } from './tools/add-community-template.js';
 import { batchDownload } from './downloader.js';
-import { getAllSla, preExecutionMeasure } from './metrics.js';
+import { getAllSla, preExecutionMeasure, recordMeasure } from './metrics.js';
 import { sendNotification } from './notifier.js';
 import { Scheduler } from './scheduler.js';
 import { reportProgress } from './progress.js';
@@ -32,6 +32,7 @@ import { registerConnectAppTool, registerConfirmAppConnectionTool, registerListA
 import { registerSynthesizeSchemaTool } from './tools/synthesize-schema.js';
 import { registerPreviewTransformTool } from './tools/transform-tool.js';
 import { registerDiscoverTemplatesTool } from './discovery.js';
+import { findPipelineById, listPipelineDefs, registerPipeline, registerRegisterPipelineTool, registerRunPipelineTool, registerListPipelinesTool } from './pipeline.js';
 
 let updateStatus: UpdateStatus = { updateAvailable: false, latestCommit: null };
 
@@ -123,6 +124,11 @@ registerAddCommunityTemplateTool(server, deps);
 registerSynthesizeSchemaTool(server, deps.engine);
 registerPreviewTransformTool(server, {});
 registerDiscoverTemplatesTool(server, deps.discovery);
+
+const pipelineDeps = { runExtraction, registerPipeline, findPipelineById, listPipelineDefs, recordMeasure };
+registerRegisterPipelineTool(server, pipelineDeps);
+registerRunPipelineTool(server, pipelineDeps);
+registerListPipelinesTool(server, pipelineDeps);
 
 server.registerPrompt('get_environment_context', {
   title: 'Environment Context',
