@@ -85,6 +85,8 @@ export async function registerTemplate(
       ...(input.contributedBy ? { contributedBy: input.contributedBy } : {}),
       ...(input.allowedDomains ? { allowedDomains: input.allowedDomains } : {}),
       ...(input.secretInputs ? { secretInputs: input.secretInputs } : {}),
+      ...(input.kind ? { kind: input.kind } : {}),
+      ...(input.requestHeaders ? { requestHeaders: input.requestHeaders } : {}),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };

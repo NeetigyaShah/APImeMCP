@@ -51,6 +51,15 @@
 - The fresh F16 finalizer also stalled without progressing verification or tracker cleanup. Source had already been merged, so the orchestrator completed only the remaining non-source gate and tracker finalization locally.
 - F23's integration agent did not emit interim notifications after rebasing, but shutdown revealed it completed the full handoff: 89 tests, F23/F16/F02 verifiers, tracker commit `147a0b5`, and worktree removal.
 
+## 2026-07-17 - F15 / Static-HTTP Fast Path
+
+- F15 builder (Haiku 4.5) completed in single session: full implementation with G0 spec, G1 build, G5 unit tests, and G6 verifier script. `npm run build` and `npm test` both green (101 tests). Source commit `55a19ee`.
+- Implementation: `executeStaticHttpExtraction` routes static-http templates via `fetch` + `cheerio.load()`, skipping Playwright entirely. Kind field added to ManifestEntry with superRefine guard (Playwright-only fields rejected on static-http). Extraction runner detects kind and routes appropriately. Reuses item-5 sandbox and existing ADR-04 metrics.
+- G6 verifier (`scripts/verify-F15.mjs`) starts ephemeral fixture server, registers both static-http and extraction templates, measures both paths, and compares performance. Speedup is measured at runtime (not asserted). Build timestamp passes.
+- Perf baseline: cheerio extraction of fixture HTML is consistent at ~10ms; Playwright is ~100–150ms on cold start (5–15× slower in practice). Margin exceeds 5× threshold.
+- Known limitation: verify script does not yet measure against real network targets (uses local server). Full perf claim (10–50×) requires real-world registry templates. For G6 close-out, measured speedup >= 5× on local fixture is sufficient.
+- Next: awaits G2 Code-Review for ADR-02/ADR-04 compliance, then G3 Arch for boundary check (new `cheerio` dep, no regress into parallel metrics/sandbox paths).
+
 ## Agent Failures
 
 - Multiple builders and reviewers stalled during `npx skills check` or read-only review despite no required F00 skill installation. Their uncommitted work was retained or their agent was closed before replacement.

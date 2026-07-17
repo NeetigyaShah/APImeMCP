@@ -1,5 +1,6 @@
 import type { ActionSequence, ExtractionResult, Manifest, ManifestEntry, RunKind } from '../types.js';
 import type { ExecuteActionSequenceOptions, ExecuteExtractionOptions } from '../engine.js';
+import { isStaticHttpEntry } from '../types.js';
 import { checkDrift } from '../drift.js';
 import type { DriftReport } from '../drift.js';
 import { applyTransform } from '../transform.js';
@@ -21,6 +22,7 @@ export interface ExtractionRunnerDeps {
   resolvePath: (...paths: string[]) => string;
   executeExtraction: (options: ExecuteExtractionOptions) => Promise<unknown>;
   executeActionSequence: (options: ExecuteActionSequenceOptions) => Promise<void>;
+  executeStaticHttpExtraction: (entry: ManifestEntry, targetUrl: string, opts?: { cookieString?: string; proxyUrl?: string }) => Promise<unknown>;
   createSuccessfulResult: (data: unknown, meta: ExtractionResult['meta'], outputSchema?: Record<string, unknown>, drift?: DriftReport) => ExtractionResult;
   buildReceipt: (input: { templateId: string; templateSource: string; targetUrl: string; data: unknown; outputSchema?: Record<string, unknown> }) => Promise<ProvenanceReceipt>;
   registryCdnAllowlist: string[];
@@ -123,6 +125,32 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
         const result = deps.createSuccessfulResult({ completedSteps: sequence.steps.length }, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema);
         result.provenance = await deps.buildReceipt({ templateId: entry.templateId, templateSource: raw, targetUrl: resolvedUrl, data: result.data, outputSchema: entry.outputSchema });
         return applySnapshot(result, entry.templateId, resolvedUrl, entry.outputSchema, snapshotMode);
+      }
+
+      if (isStaticHttpEntry(entry)) {
+        if (!connectionId && cookieString) await deps.saveCookies(entry.templateId, cookieString);
+        const effectiveCookies = connectionId ? undefined : cookieString || (useSavedCookies ? await deps.getSavedCookies(entry.templateId) : undefined);
+        const run = async () => {
+          measurementStarted = true;
+          let drift: DriftReport | undefined;
+          const data = await deps.executeMeasured(measure, () => deps.executeStaticHttpExtraction(entry, resolvedUrl, {
+            cookieString: effectiveCookies,
+            proxyUrl,
+          }), (result) => {
+            if (!entry.outputSchema) return undefined;
+            drift = checkDrift(entry.templateId, entry.outputSchema, result);
+            return { driftDetected: drift.hasDrift, driftEntryCount: drift.entries.length, driftEntries: drift.entries };
+          });
+          await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
+          const transformedData = entry.transform ? applyTransform(data, entry.transform) : data;
+          const result = deps.createSuccessfulResult(transformedData, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema, drift);
+          return applySnapshot(result, entry.templateId, resolvedUrl, entry.outputSchema, snapshotMode);
+        };
+        if (snapshotMode !== 'off') return run();
+        return await withResultCache(
+          { templateId: entry.templateId, targetUrl: resolvedUrl, cookieString: effectiveCookies, proxyUrl },
+          run,
+        );
       }
 
       if (!connectionId && cookieString) await deps.saveCookies(entry.templateId, cookieString);

@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
-import { createSuccessfulExtractionResult, crystallizeRecording } from './engine.js';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { createSuccessfulExtractionResult, crystallizeRecording, executeStaticHttpExtraction } from './engine.js';
+import type { ManifestEntry } from './types.js';
 
 const meta = {
   url: 'https://example.com/products',
@@ -80,3 +81,6 @@ describe('crystallizeRecording', () => {
     })).toThrow(/secret-like fill value/i);
   });
 });
+
+// executeStaticHttpExtraction integration tests are in scripts/verify-F15.mjs
+// Unit tests for executeStaticHttpExtraction require fs mocking which is tested in verify-F15

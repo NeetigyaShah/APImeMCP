@@ -50,6 +50,9 @@ export function isHttpUrl(value: string): boolean {
 const WaitStrategySchema = z.enum(['domcontentloaded', 'load', 'networkidle']);
 export type WaitStrategy = z.infer<typeof WaitStrategySchema>;
 
+const TemplateKindSchema = z.enum(['extraction', 'action-sequence', 'static-http']);
+export type TemplateKind = z.infer<typeof TemplateKindSchema>;
+
 export const RegisterExtractionTemplateShape = {
   templateId: TemplateIdSchema,
   domainPattern: DomainPatternSchema,
@@ -77,9 +80,34 @@ export const RegisterExtractionTemplateShape = {
   // { username: "vault-id.username", password: "vault-id.password" }). Resolved and
   // injected at run time, never persisted or logged in cleartext (see engine.ts).
   secretInputs: z.record(z.string()).optional(),
+  // Template kind: 'extraction' (Playwright browser), 'action-sequence' (interactive steps),
+  // or 'static-http' (HTTP fetch + cheerio for initial HTML). Defaults to 'extraction'.
+  kind: TemplateKindSchema.optional(),
+  // Optional request headers for static-http kind (User-Agent overrides, etc.)
+  requestHeaders: z.record(z.string()).optional(),
 };
 
-export const RegisterExtractionTemplateInputSchema = z.object(RegisterExtractionTemplateShape);
+export const RegisterExtractionTemplateInputSchema = z
+  .object(RegisterExtractionTemplateShape)
+  .superRefine((entry, ctx) => {
+    // Playwright-only fields rejected on static-http entries
+    if (entry.kind === 'static-http') {
+      if (entry.readySelector) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'readySelector is Playwright-only; omit it for kind:"static-http"',
+          path: ['readySelector'],
+        });
+      }
+      if (entry.waitStrategy) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'waitStrategy is Playwright-only; omit it for kind:"static-http"',
+          path: ['waitStrategy'],
+        });
+      }
+    }
+  });
 export type RegisterExtractionTemplateInput = z.infer<typeof RegisterExtractionTemplateInputSchema>;
 
 export const ExecuteNativeExtractionShape = {
@@ -243,7 +271,7 @@ export interface ManifestEntry {
   fixedTargetUrl?: string;
   createdAt: string;
   updatedAt: string;
-  kind?: 'extraction' | 'action-sequence';
+  kind?: TemplateKind;
   lastVerified?: { success: boolean; error?: string; timestamp: string };
   // Absent = falls back to 'domcontentloaded' at run time (see engine.ts). Existing
   // templates registered before this field existed all take that fallback.
@@ -255,6 +283,8 @@ export interface ManifestEntry {
   // { username: "vault-id.username", password: "vault-id.password" }). Absent means no
   // vault involvement for this template.
   secretInputs?: Record<string, string>;
+  // Optional request headers for static-http kind (User-Agent overrides, etc.)
+  requestHeaders?: Record<string, string>;
   // System-assigned, NOT part of the public register_extraction_template tool's input
   // schema (a caller can't just claim 'local' to escape the sandbox) - set only by
   // registry-client.ts's addFromRegistry(). 'registry' templates get a network
@@ -267,6 +297,10 @@ export interface ManifestEntry {
   // field is optional for backward compatibility with manifests published before F19;
   // registry CI rejects newly contributed entries without it.
   allowedDomains?: string[];
+}
+
+export function isStaticHttpEntry(entry: ManifestEntry): entry is ManifestEntry & { kind: 'static-http' } {
+  return entry.kind === 'static-http';
 }
 
 export type Manifest = Record<string, ManifestEntry>;
