@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SpanStatusCode } from '@opentelemetry/api';
 import type { MeasureRecord } from './types.js';
 import { onMeasure } from './metrics.js';
 
@@ -35,6 +36,8 @@ async function initOtelSdk(endpoint: string, serviceName: string) {
     const { OTLPMetricExporter } = await import('@opentelemetry/exporter-metrics-otlp-http');
     const { BasicTracerProvider, BatchSpanProcessor } = await import('@opentelemetry/sdk-trace-base');
     const { OTLPTraceExporter } = await import('@opentelemetry/exporter-trace-otlp-http');
+    // ponytail: SDK initialization path; move if throughput requires non-blocking startup
+
 
     const meterProvider = new MeterProvider({
       readers: [
@@ -89,7 +92,7 @@ async function initOtelSdk(endpoint: string, serviceName: string) {
 
         if (!record.success && record.error) {
           span.setStatus({
-            code: 2, // SpanStatusCode.ERROR
+            code: SpanStatusCode.ERROR,
             message: record.error,
           });
         }
@@ -118,12 +121,13 @@ export function initOtelAdapter(env?: NodeJS.ProcessEnv): OtelAdapterStatus {
   try {
     config = OtelEnvSchema.parse(processEnv);
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
     adapterStatus = {
       enabled: false,
       exporter: 'none',
       serviceName: 'apimemcp',
       recordsExported: 0,
-      lastError: error instanceof Error ? error.message : String(error),
+      lastError: `Validation failed: ${errorMsg}`,
     };
     return adapterStatus;
   }
@@ -160,6 +164,11 @@ export function initOtelAdapter(env?: NodeJS.ProcessEnv): OtelAdapterStatus {
           serviceName: config.OTEL_SERVICE_NAME,
           recordsExported: 0,
         };
+      } else {
+        // initOtelSdk returned false but didn't set an error, check if lastError was already set
+        if (!adapterStatus.lastError) {
+          adapterStatus.lastError = 'SDK initialization returned false without error details';
+        }
       }
     })
     .catch((error) => {

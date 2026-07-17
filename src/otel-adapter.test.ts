@@ -14,15 +14,23 @@ vi.mock('./metrics.js', () => ({
   }),
 }));
 
-// Mock OpenTelemetry modules
+// Mock OpenTelemetry modules with call tracking
+let lastCounterAdd: any = null;
+let lastHistogramRecord: any = null;
+let lastSpanSetStatus: any = null;
+
 vi.mock('@opentelemetry/sdk-metrics', () => ({
   MeterProvider: vi.fn(function (this: any, config: any) {
     this.getMeter = vi.fn(() => ({
       createCounter: vi.fn(() => ({
-        add: vi.fn(),
+        add: vi.fn((value, attrs) => {
+          lastCounterAdd = { value, attrs };
+        }),
       })),
       createHistogram: vi.fn(() => ({
-        record: vi.fn(),
+        record: vi.fn((value, attrs) => {
+          lastHistogramRecord = { value, attrs };
+        }),
       })),
     }));
   }),
@@ -42,7 +50,9 @@ vi.mock('@opentelemetry/sdk-trace-base', () => ({
     this.addSpanProcessor = vi.fn();
     this.getTracer = vi.fn(() => ({
       startSpan: vi.fn((name: string, options: any) => ({
-        setStatus: vi.fn(),
+        setStatus: vi.fn((status) => {
+          lastSpanSetStatus = status;
+        }),
         end: vi.fn(),
       })),
     }));
@@ -63,6 +73,9 @@ let mockListeners: Array<(record: MeasureRecord) => void> = [];
 describe('otel-adapter', () => {
   beforeEach(() => {
     mockListeners = [];
+    lastCounterAdd = null;
+    lastHistogramRecord = null;
+    lastSpanSetStatus = null;
     // Reset the adapter state before each test
     shutdownOtelAdapter();
   });
@@ -99,17 +112,73 @@ describe('otel-adapter', () => {
     expect(status.serviceName).toBe('apimemcp');
   });
 
-  it('subscribes to measure records when enabled', () => {
-    // For mocked OTel, we just verify the status becomes enabled after initialization
-    // The actual subscription happens asynchronously
+  it('exports measure records as metrics and spans with correct attributes', async () => {
     initOtelAdapter({
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4318',
       OTEL_SERVICE_NAME: 'test-service',
     });
 
-    // The status should eventually be enabled after async initialization
-    // For this test, we're just verifying the adapter doesn't throw
-    expect(true).toBe(true);
+    // Give async initialization time to complete
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Trigger a measure record through the listener
+    const testRecord: MeasureRecord = {
+      templateId: 'test-template',
+      kind: 'extraction',
+      success: true,
+      durationMs: 100,
+      timestamp: '2026-07-17T12:00:00.000Z',
+    };
+
+    // Find and call the listener that was registered
+    if (mockListeners.length > 0) {
+      mockListeners[0](testRecord);
+
+      // Verify counter.add was called with correct value and attributes
+      expect(lastCounterAdd).not.toBeNull();
+      expect(lastCounterAdd.value).toBe(1);
+      expect(lastCounterAdd.attrs).toEqual({
+        template_id: 'test-template',
+        kind: 'extraction',
+        success: 'true',
+      });
+
+      // Verify histogram.record was called with correct value and attributes
+      expect(lastHistogramRecord).not.toBeNull();
+      expect(lastHistogramRecord.value).toBe(100);
+      expect(lastHistogramRecord.attrs).toEqual({
+        template_id: 'test-template',
+        kind: 'extraction',
+        success: 'true',
+      });
+    }
+  });
+
+  it('marks failed extractions with ERROR span status', async () => {
+    initOtelAdapter({
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4318',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const failureRecord: MeasureRecord = {
+      templateId: 'error-template',
+      kind: 'extraction',
+      success: false,
+      error: 'Template validation failed',
+      durationMs: 50,
+      timestamp: '2026-07-17T12:00:00.500Z',
+    };
+
+    // Call the listener with a failure record
+    if (mockListeners.length > 0) {
+      mockListeners[0](failureRecord);
+
+      // Verify setStatus was called with ERROR code and error message
+      expect(lastSpanSetStatus).not.toBeNull();
+      expect(lastSpanSetStatus.code).toBe(2); // SpanStatusCode.ERROR
+      expect(lastSpanSetStatus.message).toBe('Template validation failed');
+    }
   });
 
   it('returns current status via getOtelStatus', async () => {

@@ -118,6 +118,7 @@ reuse it. This read-only lookup never opens a browser or reads cookies.
   standalone `apis/<id>.mjs` (only needs Playwright), each with a generated docs page
   at `/docs/<id>`.
 - **Scheduling, metrics, notifications** — cron re-runs, run stats, webhook pings.
+- **OpenTelemetry observability** — export extraction metrics and traces (counter, histogram, synthetic spans) to an OTLP-compatible backend by setting `OTEL_EXPORTER_OTLP_ENDPOINT`. Integrates with standard observability stacks (Datadog, New Relic, Jaeger, Prometheus, etc.) without code changes.
 
 ## Connected app profiles
 

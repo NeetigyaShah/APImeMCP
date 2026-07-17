@@ -9,15 +9,15 @@
     "S5": "Done",
     "S6": "Done",
     "S7": "Done",
-    "S8": "Done",
+    "S8": "Todo",
     "S9": "Todo",
     "S10": "Todo",
     "S11": "Todo"
   },
-  "overall": "In-Prog",
+  "overall": "Blocked",
   "currentGate": "G2",
-  "blockedBy": null,
+  "blockedBy": "G2 code review FAILED: (1) verify-F17.mjs never exercises real OTLP export path (no test configures a live endpoint + runs extraction + asserts mock server received metrics/traces payload) despite spec 7/8 requiring it -- Lv gate would pass on a false positive; (2) S8 docs not done despite status claiming Done -- no OTEL_* section in README.md or skills/using-apimemcp/SKILL.md; (3) otel-adapter.test.ts has a no-op assertion (expect(true).toBe(true)) and never verifies counter.add/histogram.record/span timing per spec 7; (4) @opentelemetry/api added as dependency but unused -- SpanStatusCode.ERROR hardcoded as magic number 2 instead of importing the enum.",
   "owner": "engine-builder",
-  "reviewer": null,
-  "updatedAt": "2026-07-17T13:56:00.000Z"
+  "reviewer": "G2-code-reviewer",
+  "updatedAt": "2026-07-17T14:03:14.645Z"
 }

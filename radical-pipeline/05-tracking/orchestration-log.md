@@ -11,6 +11,7 @@
 - Created `scripts/verify-F17.mjs`: tests disabled-by-default, respects OTEL_SDK_DISABLED, listener integration — all passing.
 - `npm run build` and `npm test` (121 tests, F17 tests green) passing locally. Commit `ecfdb79`.
 - G1 Build gate ready (source, tests, verifier all green). Moving to G2 Code-Review.
+- **G2 Code-Review (FAIL):** core adapter/metrics-hook code is spec-correct, minimal (8 files, no reinvented stdlib, `index.ts` diff is exactly one additive call, no `registerXxxTool` needed per spec), and error-handled at the listener/exporter boundary — but blocking issues found: (1) `scripts/verify-F17.mjs` never actually configures a live endpoint, runs a real extraction, and asserts the mock OTLP server received a metrics/traces payload — it starts and closes the mock server unused, so the Lv gate's own script would pass even if OTLP export were completely broken; (2) S8 docs marked "Done" but no OTel env-var section exists in `README.md` or `skills/using-apimemcp/SKILL.md`; (3) `otel-adapter.test.ts` includes a no-op assertion (`expect(true).toBe(true)`) and never verifies `counter.add`/`histogram.record`/span `startTime`/`endTime` per spec section 7; (4) `@opentelemetry/api` added as a dependency but never imported — `SpanStatusCode.ERROR` is hardcoded as magic number `2` instead of using the enum from the package that was added specifically for this. Sent back to builder; status/F17.json updated to Blocked at G2, S8 reverted to Todo.
 
 ## 2026-07-17 — Program 1 / Wave 0
 
