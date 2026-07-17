@@ -14,6 +14,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - run: npm test
+      - run: node scripts/verify-F00.mjs
       - run: node scripts/verify-engine.mjs
       - run: node scripts/verify-server.mjs
       - run: node scripts/verify-dashboard.mjs

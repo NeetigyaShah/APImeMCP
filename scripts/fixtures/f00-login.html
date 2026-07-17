@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>F00 login fixture</title></head>
+  <body>
+    <form id="login-form">
+      <label>Username <input name="username" required></label>
+      <button type="submit">Sign in</button>
+    </form>
+    <p id="logged-in" hidden>Logged in</p>
+    <script>
+      const form = document.querySelector('#login-form');
+      const loggedIn = document.querySelector('#logged-in');
+      function render() {
+        const authenticated = localStorage.getItem('f00-authenticated') === 'true';
+        form.hidden = authenticated;
+        loggedIn.hidden = !authenticated;
+      }
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        localStorage.setItem('f00-authenticated', 'true');
+        render();
+      });
+      render();
+    </script>
+  </body>
+</html>

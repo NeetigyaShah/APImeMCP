@@ -8,12 +8,12 @@ import type { ActionSequence, ActionStep, WaitStrategy } from './types.js';
 import {
   confirmAppConnection,
   getAppConnection,
-  getAppProfilePath,
   listAppConnections,
   markAppConnectionError,
   markAppConnectionOpen,
+  resolveProfileDir,
 } from './app-connections.js';
-import type { AppConnection } from './app-connections.js';
+import type { AppConnection } from './types.js';
 
 const DEFAULT_WAIT_STRATEGY: WaitStrategy = 'domcontentloaded';
 
@@ -54,6 +54,13 @@ function getBrowser(): Browser {
   return browserInstance;
 }
 
+export async function launchPersistentContext(
+  profileDir: string,
+  launchOptions: Parameters<typeof chromium.launchPersistentContext>[1]
+): Promise<BrowserContext> {
+  return chromium.launchPersistentContext(profileDir, launchOptions);
+}
+
 async function ensureAppContext(connectionId: string): Promise<BrowserContext> {
   const existing = appContexts.get(connectionId);
   if (existing && !existing.isClosed()) return existing;
@@ -62,7 +69,7 @@ async function ensureAppContext(connectionId: string): Promise<BrowserContext> {
   if (!connection) throw new Error(`No app connection configured for "${connectionId}"`);
 
   try {
-    const context = await chromium.launchPersistentContext(getAppProfilePath(connection), {
+    const context = await launchPersistentContext(await resolveProfileDir(connectionId), {
       headless: false,
       userAgent: USER_AGENT,
       viewport: VIEWPORT,

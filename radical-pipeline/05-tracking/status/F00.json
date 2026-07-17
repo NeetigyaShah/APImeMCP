@@ -7,17 +7,17 @@
     "S3": "Todo",
     "S4": "Todo",
     "S5": "Todo",
-    "S6": "Todo",
+    "S6": "Done",
     "S7": "Todo",
     "S8": "Todo",
-    "S9": "Todo",
-    "S10": "Todo",
+    "S9": "Done",
+    "S10": "Done",
     "S11": "Todo"
   },
-  "overall": "Not-started",
-  "currentGate": "G1",
+  "overall": "In-Progress",
+  "currentGate": "G7",
   "blockedBy": null,
   "owner": "f00-builder",
-  "reviewer": null,
-  "updatedAt": "2026-07-16T22:31:50.345Z"
+  "reviewer": "local-g4-security",
+  "updatedAt": "2026-07-17T07:56:12.726Z"
 }

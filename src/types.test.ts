@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { ConnectAppInputSchema, RegisterExtractionTemplateInputSchema, ExecuteNativeExtractionInputSchema } from './types.js';
+import {
+  AppConnectionSchema,
+  ConnectAppInputSchema,
+  ExecuteNativeExtractionInputSchema,
+  RegisterExtractionTemplateInputSchema,
+} from './types.js';
 
 describe('RegisterExtractionTemplateInputSchema', () => {
   it('accepts a valid kebab-case templateId and lowercases domainPattern', () => {
@@ -76,5 +81,25 @@ describe('ConnectAppInputSchema', () => {
       autoStart: true,
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe('AppConnectionSchema', () => {
+  const connection = {
+    connectionId: 'amazon',
+    domainPattern: 'amazon.com',
+    loginUrl: 'https://www.amazon.com/ap/signin',
+    profileDir: 'templates/app-profiles/amazon',
+    autoStart: false,
+    status: 'pending',
+    createdAt: '2026-07-17T00:00:00.000Z',
+  };
+
+  it('accepts the frozen browser-profile shape', () => {
+    expect(AppConnectionSchema.safeParse(connection).success).toBe(true);
+  });
+
+  it('rejects secret-shaped stray fields', () => {
+    expect(AppConnectionSchema.safeParse({ ...connection, password: 'not-stored-here' }).success).toBe(false);
   });
 });

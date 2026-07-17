@@ -144,8 +144,9 @@ await client.callTool({
 Connections with `autoStart: true` reopen their persistent browser profiles when
 the MCP server starts. The server does not scrape or print cookies; Chromium owns
 the session state. The profile directories are still sensitive login material and
-must not be committed or shared. Use `list_app_connections` to inspect configured
-profiles. Native OAuth/API connectors for services such as Slack or Google Drive
+must not be committed or shared. Use `list_app_connections` to inspect connected
+profiles. App connections contain only browser-profile metadata; passwords, API
+keys, cookie strings, and other secret values do not belong in this store. Native OAuth/API connectors for services such as Slack or Google Drive
 can be added later as a separate connector type when the provider's client ID,
 scopes, and callback policy are known.
 
@@ -153,6 +154,7 @@ scopes, and callback policy are known.
 
 ```bash
 npm test                          # unit tests (storage + validation, no browser)
+node scripts/verify-F00.mjs       # verifies persistent Chromium profile reuse
 node scripts/verify-engine.mjs    # manual smoke test of the browser engine
 node scripts/verify-server.mjs    # manual end-to-end smoke test of the full server
 ```
@@ -344,7 +346,7 @@ Run a registered template against a URL.
 |---|---|---|
 | `targetUrl` | string, optional | absolute `http://` or `https://` URL. Omit only when `templateId` refers to a template registered with `fixedTargetUrl` — that URL is used automatically. |
 | `templateId` | string, optional | explicit template; if omitted, resolved from `targetUrl`'s domain (in which case `targetUrl` is required) |
-| `connectionId` | string, optional | confirmed persistent browser profile created by `connect_app`; must match the target domain; cannot be combined with manual cookie input |
+| `connectionId` | string, optional | connected persistent browser profile created by `connect_app`; must match the target domain; cannot be combined with manual cookie input |
 | `proxyUrl` | string, optional | e.g. `http://user:pass@host:port`, passed through to Playwright's `context.newContext({ proxy })` for routing through an authorized egress proxy or testing region-specific rendering. No automated rotation. |
 
 Returns `{ success, data?, error?, meta: { url, templateId, domainMatched, durationMs, timestamp } }`.
@@ -442,7 +444,9 @@ automatically. Own accounts/domains only — these are live session credentials.
 
 Open or configure a persistent browser profile for a logged-in site. The visible
 browser window is intentionally user-driven: complete login there, then call
-`confirm_app_connection`.
+`confirm_app_connection`. These three tools are registered through dedicated
+`registerXxxTool(server, deps)` modules, with their app-connection and browser
+collaborators injected from `src/index.ts`.
 
 | field | type | notes |
 |---|---|---|
@@ -457,12 +461,14 @@ Mark a visible profile ready for extraction after login.
 
 | field | type | notes |
 |---|---|---|
-| `connectionId` | string | configured profile to confirm |
+| `connectionId` | string | pending profile to mark connected |
 
 ### `list_app_connections`
 
-No input. Returns configured connection IDs, domain scopes, startup behavior, and
-confirmation status. It never returns cookie values.
+No input. Returns connection IDs, domain scopes, startup behavior, and status. It
+never returns cookie values or credential fields; the persistent Chromium profile
+directory is the browser-identity boundary and encrypted secrets belong to the
+separate vault surface.
 
 ## Prompts
 

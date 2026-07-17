@@ -2,38 +2,37 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { atomicWriteFile } from './storage.js';
 import { withLock } from './lock.js';
-import { RegisterExtractionTemplateShape, isHttpUrl } from './types.js';
-import type { ConnectAppInput } from './types.js';
+import { AppConnectionSchema, RegisterExtractionTemplateShape, isHttpUrl } from './types.js';
+import type { AppConnection, ConnectAppInput } from './types.js';
 
-export type AppConnectionStatus = 'configured' | 'open' | 'confirmed' | 'error';
-
-export interface AppConnection {
-  connectionId: string;
-  domainPattern: string;
-  loginUrl: string;
-  profileDir: string;
-  autoStart: boolean;
-  status: AppConnectionStatus;
-  createdAt: string;
-  updatedAt: string;
-  lastOpenedAt?: string;
-  confirmedAt?: string;
-  error?: string;
-}
+export type { AppConnection } from './types.js';
 
 function getConnectionsPath(): string {
   return path.join(path.resolve(process.cwd(), 'templates'), 'app-connections.json');
 }
 
 export function getAppProfilePath(connection: AppConnection): string {
-  return path.resolve(process.cwd(), connection.profileDir);
+  const profilesDir = path.resolve(process.cwd(), 'templates', 'app-profiles');
+  const profileDir = path.resolve(process.cwd(), connection.profileDir);
+  if (profileDir !== profilesDir && !profileDir.startsWith(`${profilesDir}${path.sep}`)) {
+    throw new Error('profileDir must stay within templates/app-profiles');
+  }
+  return profileDir;
 }
+
+export async function resolveProfileDir(connectionId: string): Promise<string> {
+  const connection = await getAppConnection(connectionId);
+  if (!connection) throw new Error(`No app connection configured for "${connectionId}"`);
+  return getAppProfilePath(connection);
+}
+
+export const resolveAppProfileDir = resolveProfileDir;
 
 async function loadRaw(): Promise<AppConnection[]> {
   try {
     const raw = await fs.readFile(getConnectionsPath(), 'utf8');
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as AppConnection[]) : [];
+    const parsed = AppConnectionSchema.array().safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : [];
   } catch {
     return [];
   }
@@ -52,7 +51,9 @@ function validateConnectionInput(input: ConnectAppInput): void {
   }
   let loginHostname: string;
   try {
-    loginHostname = new URL(input.loginUrl).hostname.toLowerCase();
+    const loginUrl = new URL(input.loginUrl);
+    if (loginUrl.username || loginUrl.password) throw new Error('loginUrl must not include credentials');
+    loginHostname = loginUrl.hostname.toLowerCase();
   } catch {
     throw new Error('loginUrl must contain a valid hostname');
   }
@@ -81,7 +82,7 @@ export async function getAppConnection(connectionId: string): Promise<AppConnect
   return connections.find((connection) => connection.connectionId === connectionId);
 }
 
-export async function upsertAppConnection(input: ConnectAppInput): Promise<AppConnection> {
+export async function createConnection(input: ConnectAppInput): Promise<AppConnection> {
   validateConnectionInput(input);
   return withLock(async () => {
     const connections = await listAppConnections();
@@ -94,12 +95,9 @@ export async function upsertAppConnection(input: ConnectAppInput): Promise<AppCo
       loginUrl: input.loginUrl,
       profileDir: existing?.profileDir ?? path.join('templates', 'app-profiles', input.connectionId),
       autoStart: input.autoStart ?? existing?.autoStart ?? false,
-      status: changedTarget ? 'configured' : (existing?.status ?? 'configured'),
+      status: changedTarget ? 'pending' : (existing?.status ?? 'pending'),
       createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      ...(changedTarget ? {} : existing?.lastOpenedAt ? { lastOpenedAt: existing.lastOpenedAt } : {}),
-      ...(changedTarget ? {} : existing?.confirmedAt ? { confirmedAt: existing.confirmedAt } : {}),
-      ...(changedTarget ? {} : existing?.error ? { error: existing.error } : {}),
+      ...(changedTarget ? {} : existing?.lastUsedAt ? { lastUsedAt: existing.lastUsedAt } : {}),
     };
     const next = connections.filter((item) => item.connectionId !== input.connectionId);
     next.push(connection);
@@ -107,6 +105,11 @@ export async function upsertAppConnection(input: ConnectAppInput): Promise<AppCo
     return connection;
   });
 }
+
+export const getConnection = getAppConnection;
+export const listConnections = listAppConnections;
+
+export const upsertAppConnection = createConnection;
 
 async function updateConnection(
   connectionId: string,
@@ -116,30 +119,23 @@ async function updateConnection(
     const connections = await listAppConnections();
     const existing = connections.find((connection) => connection.connectionId === connectionId);
     if (!existing) throw new Error(`No app connection configured for "${connectionId}"`);
-    const updated = update({ ...existing, updatedAt: new Date().toISOString() });
+    const updated = update(existing);
     await saveRaw(connections.map((item) => (item.connectionId === connectionId ? updated : item)));
     return updated;
   });
 }
 
-export function markAppConnectionOpen(connectionId: string): Promise<AppConnection> {
+export function updateConnectionStatus(
+  connectionId: string,
+  status: AppConnection['status']
+): Promise<AppConnection> {
   return updateConnection(connectionId, (connection) => ({
     ...connection,
-    status: connection.status === 'confirmed' ? 'confirmed' : 'open',
-    lastOpenedAt: new Date().toISOString(),
-    error: undefined,
+    status,
+    ...(status === 'connected' ? { lastUsedAt: new Date().toISOString() } : {}),
   }));
 }
 
-export function confirmAppConnection(connectionId: string): Promise<AppConnection> {
-  return updateConnection(connectionId, (connection) => ({
-    ...connection,
-    status: 'confirmed',
-    confirmedAt: new Date().toISOString(),
-    error: undefined,
-  }));
-}
-
-export function markAppConnectionError(connectionId: string, error: string): Promise<AppConnection> {
-  return updateConnection(connectionId, (connection) => ({ ...connection, status: 'error', error }));
-}
+export const markAppConnectionOpen = (connectionId: string) => updateConnectionStatus(connectionId, 'pending');
+export const confirmAppConnection = (connectionId: string) => updateConnectionStatus(connectionId, 'connected');
+export const markAppConnectionError = (connectionId: string, _error: string) => updateConnectionStatus(connectionId, 'error');

@@ -11,8 +11,6 @@ import {
   SendNotificationShape,
   SaveTemplateCookiesShape,
   AddCommunityTemplateShape,
-  ConnectAppShape,
-  AppConnectionIdShape,
 } from './types.js';
 import type { ExtractionResult, ActionSequence } from './types.js';
 import {
@@ -44,6 +42,11 @@ import { checkForUpdates } from './updater.js';
 import type { UpdateStatus } from './updater.js';
 import { startDashboard } from './dashboard.js';
 import { getAppConnection, listAppConnections, upsertAppConnection } from './app-connections.js';
+import {
+  registerConnectAppTool,
+  registerConfirmAppConnectionTool,
+  registerListAppConnectionsTool,
+} from './tools/app-connections-tools.js';
 
 let updateStatus: UpdateStatus = { updateAvailable: false, latestCommit: null };
 
@@ -123,8 +126,8 @@ async function runExtraction(
       }
       const connection = await getAppConnection(connectionId);
       if (!connection) throw new Error(`No app connection configured for "${connectionId}"`);
-      if (connection.status !== 'confirmed') {
-        throw new Error(`App connection "${connectionId}" is not confirmed; log in and call confirm_app_connection first`);
+      if (connection.status !== 'connected') {
+        throw new Error(`App connection "${connectionId}" is not connected; log in and call confirm_app_connection first`);
       }
       const targetHostname = new URL(resolvedUrl).hostname.toLowerCase();
       const matchesConnection =
@@ -253,52 +256,16 @@ server.tool('execute_native_extraction', ExecuteNativeExtractionShape, async (in
   };
 });
 
-server.tool('connect_app', ConnectAppShape, async (input) => {
-  try {
-    const configured = await upsertAppConnection(input);
-    const opened = await openAppConnection(configured.connectionId);
-    log(`Opened login profile for app connection "${opened.connectionId}"`);
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: JSON.stringify(
-            {
-              success: true,
-              connection: opened,
-              nextStep: 'Log in in the visible browser window, then call confirm_app_connection.',
-            },
-            null,
-            2
-          ),
-        },
-      ],
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logError(`connect_app failed: ${message}`);
-    return { content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: message }) }], isError: true };
-  }
-});
+const appConnectionsToolDeps = {
+  appConnections: { upsert: upsertAppConnection, list: listAppConnections },
+  engine: { open: openAppConnection, confirm: confirmOpenAppConnection },
+  log,
+  logError,
+};
 
-server.tool('confirm_app_connection', AppConnectionIdShape, async (input) => {
-  try {
-    const connection = await confirmOpenAppConnection(input.connectionId);
-    log(`Confirmed app connection "${connection.connectionId}"`);
-    return {
-      content: [{ type: 'text' as const, text: JSON.stringify({ success: true, connection }, null, 2) }],
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logError(`confirm_app_connection failed: ${message}`);
-    return { content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: message }) }], isError: true };
-  }
-});
-
-server.tool('list_app_connections', {}, async () => {
-  const connections = await listAppConnections();
-  return { content: [{ type: 'text' as const, text: JSON.stringify(connections, null, 2) }] };
-});
+registerConnectAppTool(server, appConnectionsToolDeps);
+registerConfirmAppConnectionTool(server, appConnectionsToolDeps);
+registerListAppConnectionsTool(server, appConnectionsToolDeps);
 
 // Persist session cookies for a template WITHOUT running it, so a cookie mentioned in a
 // chat lands in the dashboard's saved-cookies store (badge + "Use saved cookies" button).

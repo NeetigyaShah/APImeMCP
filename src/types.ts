@@ -77,6 +77,22 @@ export const ConnectAppShape = {
 export const ConnectAppInputSchema = z.object(ConnectAppShape);
 export type ConnectAppInput = z.infer<typeof ConnectAppInputSchema>;
 
+export const AppConnectionStatusSchema = z.enum(['pending', 'connected', 'expired', 'error']);
+
+export const AppConnectionSchema = z
+  .object({
+    connectionId: z.string(),
+    domainPattern: DomainPatternSchema,
+    loginUrl: z.string().refine(isHttpUrl, { message: 'loginUrl must be an absolute http:// or https:// URL' }),
+    profileDir: z.string().regex(/^templates[\\/]app-profiles[\\/][a-z0-9]+(?:-[a-z0-9]+)*$/, 'profileDir must be a managed app profile'),
+    autoStart: z.boolean().default(false),
+    status: AppConnectionStatusSchema,
+    createdAt: z.string().datetime(),
+    lastUsedAt: z.string().datetime().optional(),
+  })
+  .strict();
+export type AppConnection = z.infer<typeof AppConnectionSchema>;
+
 export const AppConnectionIdShape = {
   connectionId: TemplateIdSchema,
 };
