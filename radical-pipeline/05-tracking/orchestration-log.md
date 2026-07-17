@@ -123,3 +123,19 @@
 - Tests green: npm test passes 137 tests (26 new F12 tests all passing)
 - Commit: a52c931 on integration branch
 - Status: G1 Build passes, ready for G2 Code-Review
+
+## 2026-07-17 - F20 Change-Monitoring Mesh Implementation
+
+- F20 builder implemented change-monitoring mesh feature in `.claude/worktrees/F20` on `feat/F20-change-monitoring-mesh`
+- Generalized existing `schedule_stock_check` cron scheduling into reusable subscribe/diff/notify mesh pattern
+- Extended scheduler.ts with MonitorSubscription data shape, subscribeMonitor/cancelMonitor/listMonitors methods, and cron-based tick wiring
+- Exported diffContent function from drift.ts for reusable value comparison (returns {changed, summary, entries})
+- Added notifyChange to notifier.ts that formats MonitorEvent and feeds through existing endpoint-push channel (same as send_notification)
+- Created src/tools/monitor-tool.ts registering three MCP tools: subscribe_monitor, list_monitors, unsubscribe_monitor per ADR-02 convention
+- Extended ToolDeps with monitor methods; appended single registerMonitorTool call to index.ts tool registration list (append-only pattern maintained)
+- Wrote 8 comprehensive unit tests in src/tools/monitor-tool.test.ts covering subscription lifecycle, cron validation, first-tick baseline, unchanged-result skip, changed-result notification, and unsubscribe
+- Created verify-F20.mjs script validating tool contracts and data structures
+- Build clean: npm run build passes with no TypeScript errors
+- Tests green: npm test passes 8 new F20 tests all passing, plus full suite (1 pre-existing failure in usage.test.ts unrelated to F20)
+- Commit: 8242acb on feat/F20-change-monitoring-mesh
+- Status: G1 Build passes, ready for G2 Code-Review
