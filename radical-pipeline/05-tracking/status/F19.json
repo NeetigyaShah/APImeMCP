@@ -12,12 +12,12 @@
     "S8": "Done",
     "S9": "Done",
     "S10": "Done",
-    "S11": "In-Prog"
+    "S11": "Done"
   },
-  "overall": "In-Progress",
+  "overall": "Ready-for-integration",
   "currentGate": "G7",
   "blockedBy": null,
   "owner": null,
   "reviewer": null,
-  "updatedAt": "2026-07-17T09:22:09.767Z"
+  "updatedAt": "2026-07-17T09:35:47.003Z"
 }

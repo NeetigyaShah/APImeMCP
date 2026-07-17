@@ -99,18 +99,19 @@ export async function writeBadgeFiles(records, { out, dryRun, atomicWriteFile, n
 export async function main() {
   const options = parseArgs(process.argv.slice(2));
   const outputDirectory = path.resolve(options.out);
-  const [{ fetchRegistryManifest, listVerifiable, registerRegistryEntry }, { initBrowser, closeBrowser }, { runExtraction }, { ensureStorageInitialized, atomicWriteFile }, { withLock }, { sendNotification }, { isDomainAllowed }] =
+  const [{ fetchRegistryManifest, listVerifiable, registerRegistryEntry }, { initBrowser, closeBrowser }, { runExtraction }, { ensureStorageInitialized, atomicWriteFile }, { sendNotification }, { isDomainAllowed }] =
     await Promise.all([
       import('../dist/registry-client.js'),
       import('../dist/engine.js'),
       import('../dist/index.js'),
       import('../dist/storage.js'),
-      import('../dist/lock.js'),
       import('../dist/notifier.js'),
       import('../dist/registry-lint.js'),
     ]);
   const manifest = await fetchRegistryManifest();
   const scratchDir = await fs.mkdtemp(path.join(os.tmpdir(), 'apimemcp-registry-verify-'));
+  const originalWorkingDirectory = process.cwd();
+  let browserInitialized = false;
 
   try {
     process.chdir(scratchDir);
@@ -120,7 +121,8 @@ export async function main() {
       if (!registration.registered) throw new Error(registration.error);
     }
     await initBrowser();
-    const records = await withLock(() => verifyEntries(manifest, {
+    browserInitialized = true;
+    const records = await verifyEntries(manifest, {
       only: options.only,
       concurrency: options.concurrency,
       isDomainAllowed,
@@ -135,7 +137,7 @@ export async function main() {
         });
         return { ...result, observedDomains: [...observedDomains] };
       },
-    }));
+    });
     await writeBadgeFiles(records, {
       out: outputDirectory,
       dryRun: options.dryRun,
@@ -144,9 +146,17 @@ export async function main() {
         ? (record, previous, current) => sendNotification(process.env.VERIFY_NOTIFY_URL, `Registry verification changed for ${record.templateId}: ${previous} -> ${current}`)
         : undefined,
     });
-    for (const record of records) console.log(`${record.templateId}: ${computeBadge([record]).message}${record.network ? ` (${record.network.verdict})` : ''}`);
+    for (const record of records) {
+      const networkSummary = record.network
+        ? record.network.verdict === 'drift'
+          ? ` (drift: undeclared ${record.network.undeclaredDomains.join(', ')})`
+          : ' (clean)'
+        : '';
+      console.log(`${record.templateId}: ${computeBadge([record]).message}${networkSummary}`);
+    }
   } finally {
-    if (process.cwd() === scratchDir) await closeBrowser();
+    if (browserInitialized) await closeBrowser();
+    if (process.cwd() === scratchDir) process.chdir(originalWorkingDirectory);
     await fs.rm(scratchDir, { recursive: true, force: true });
   }
 }

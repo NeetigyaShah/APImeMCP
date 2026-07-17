@@ -1,4 +1,9 @@
 {
   "templateId": "compliant-template",
+  "domainPattern": "fixture.example",
+  "scriptPath": "compliant-template.js",
+  "fixedTargetUrl": "{{PRIMARY_ORIGIN}}/compliant",
+  "createdAt": "2026-07-17T00:00:00.000Z",
+  "updatedAt": "2026-07-17T00:00:00.000Z",
   "allowedDomains": ["127.0.0.1"]
 }
