@@ -5,6 +5,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ActionSequence, ActionStep, ExtractionMeta, ExtractionResult, MeasureRecord, RunKind, WaitStrategy } from './types.js';
+import type { DriftReport } from './drift.js';
 import { recordMeasure } from './metrics.js';
 import { validateOutput } from './schema.js';
 import {
@@ -31,6 +32,7 @@ export function createSuccessfulExtractionResult(
   data: unknown,
   meta: ExtractionMeta,
   outputSchema?: Record<string, unknown>,
+  drift?: DriftReport,
 ): ExtractionResult {
   const schemaValidation = outputSchema ? validateOutput(data, outputSchema) : undefined;
   return {
@@ -38,6 +40,7 @@ export function createSuccessfulExtractionResult(
     data,
     meta,
     ...(schemaValidation ? { schemaValidation } : {}),
+    ...(drift ? { drift } : {}),
   };
 }
 
@@ -47,7 +50,7 @@ const appContexts = new Map<string, BrowserContext>();
 export async function executeMeasured<T>(
   measure: { templateId: string; kind: RunKind },
   operation: () => Promise<T>,
-  enrichMeasure?: (result: T) => Pick<MeasureRecord, 'driftDetected' | 'driftEntryCount'> | undefined,
+  enrichMeasure?: (result: T) => Pick<MeasureRecord, 'driftDetected' | 'driftEntryCount' | 'driftEntries'> | undefined,
 ): Promise<T> {
   const startedAt = Date.now();
   let result!: T;

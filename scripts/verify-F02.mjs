@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import { chromium } from 'playwright';
 
 const fixtureDir = fileURLToPath(new URL('./fixtures/f02-drift/', import.meta.url));
 const tempDir = await mkdtemp(path.join(os.tmpdir(), 'apimemcp-f02-'));
@@ -31,19 +32,35 @@ try {
     arguments: {
       templateId: 'f02-drift',
       domainPattern: '127.0.0.1',
-      executableScript: "(() => ({ name: document.querySelector('#name, #product-name')?.textContent ?? null, price: Number(document.querySelector('#price')?.textContent) || null }))()",
+      executableScript: "(() => ({ name: document.querySelector('#name')?.textContent, category: document.querySelector('#product-name')?.textContent, price: Number(document.querySelector('#price')?.textContent) || null }))()",
       outputSchema: { type: 'object', properties: { name: { type: 'string' }, price: { type: 'number' } }, required: ['name', 'price'] },
     },
   });
   const matching = await client.callTool({ name: 'execute_native_extraction', arguments: { templateId: 'f02-drift', targetUrl: `http://127.0.0.1:${fixturePort}/v1` } });
   const drifted = await client.callTool({ name: 'execute_native_extraction', arguments: { templateId: 'f02-drift', targetUrl: `http://127.0.0.1:${fixturePort}/v2` } });
+  await client.callTool({
+    name: 'register_extraction_template',
+    arguments: {
+      templateId: 'f02-schema-less',
+      domainPattern: '127.0.0.1',
+      executableScript: "(() => ({ value: document.querySelector('#name, #product-name')?.textContent ?? null }))()",
+    },
+  });
+  const schemaLess = await client.callTool({ name: 'execute_native_extraction', arguments: { templateId: 'f02-schema-less', targetUrl: `http://127.0.0.1:${fixturePort}/v1` } });
   const stats = JSON.parse((await client.callTool({ name: 'get_extraction_stats', arguments: {} })).content[0].text);
   const row = stats.templates.find((item) => item.templateId === 'f02-drift');
-  const dashboard = await fetch('http://127.0.0.1:3000/').then((response) => response.text());
   const matchingResult = JSON.parse(matching.content[0].text);
   const driftedResult = JSON.parse(drifted.content[0].text);
-  const ok = matchingResult.success === true && driftedResult.success === true && row?.driftCount === 1 && typeof row.lastDriftAt === 'string' && dashboard.includes('sla.driftCount') && !toolsBefore.includes('check_drift');
-  console.log(ok ? 'PASS' : 'FAIL', JSON.stringify({ matching: matchingResult, drifted: driftedResult, stats: row, noNewTool: !toolsBefore.includes('check_drift') }));
+  const schemaLessResult = JSON.parse(schemaLess.content[0].text);
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.goto('http://127.0.0.1:3000/');
+  await page.waitForSelector('#stats tbody tr[data-template-id="f02-drift"]');
+  const dashboardState = await page.locator('#stats tbody tr[data-template-id="f02-drift"]').textContent();
+  await browser.close();
+  const entries = driftedResult.drift?.entries ?? [];
+  const ok = matchingResult.success === true && !matchingResult.drift?.hasDrift && driftedResult.success === true && entries.some((entry) => entry.kind === 'field_removed' && entry.path === 'name') && entries.some((entry) => entry.kind === 'field_added' && entry.path === 'category') && entries.some((entry) => entry.kind === 'type_changed' && entry.path === 'price') && row?.driftCount === 1 && row.driftEntries?.some((entry) => entry.kind === 'field_added' && entry.path === 'category') && typeof row.lastDriftAt === 'string' && dashboardState.includes('field_removed:name') && dashboardState.includes('field_added:category') && dashboardState.includes('type_changed:price') && schemaLessResult.success === true && schemaLessResult.drift === undefined && stats.templates.find((item) => item.templateId === 'f02-schema-less')?.driftCount === 0 && !toolsBefore.includes('check_drift');
+  console.log(ok ? 'PASS' : 'FAIL', JSON.stringify({ matching: matchingResult, drifted: driftedResult, schemaLess: schemaLessResult, stats: row, dashboardState, noNewTool: !toolsBefore.includes('check_drift') }));
   process.exitCode = ok ? 0 : 1;
 } finally {
   await client.close();

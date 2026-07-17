@@ -478,9 +478,10 @@ async function pollStats() {
     const body = document.querySelector('#stats tbody');
     if (!payload.templates.length) return;
     body.innerHTML = payload.templates.map(function (sla) {
-      return '<tr><td>' + sla.templateId + '</td><td>' + sla.runs + '</td><td>' +
+      return '<tr data-template-id="' + sla.templateId + '"><td>' + sla.templateId + '</td><td>' + sla.runs + '</td><td>' +
         Math.round(sla.successRate * 100) + '%</td><td>' + Math.round(sla.p95DurationMs) +
-        ' ms</td><td>' + sla.driftCount + (sla.lastDriftAt ? ' (last ' + new Date(sla.lastDriftAt).toLocaleString() + ')' : '') +
+        ' ms</td><td data-drift-count="' + sla.driftCount + '">' + sla.driftCount + (sla.lastDriftAt ? ' (last ' + new Date(sla.lastDriftAt).toLocaleString() + ')' : '') +
+        (sla.driftEntries?.length ? '<br><span class="dim">' + sla.driftEntries.map(function (entry) { return entry.kind + ':' + entry.path; }).join(', ') + '</span>' : '') +
         '</td><td>' + new Date(sla.lastRunAt).toLocaleString() + '</td></tr>';
     }).join('');
   } catch {

@@ -1,6 +1,7 @@
 import type { ActionSequence, ExtractionResult, Manifest, ManifestEntry, RunKind } from '../types.js';
 import type { ExecuteActionSequenceOptions, ExecuteExtractionOptions } from '../engine.js';
 import { checkDrift } from '../drift.js';
+import type { DriftReport } from '../drift.js';
 
 export interface ExtractionRunnerDeps {
   loadManifest: () => Promise<Manifest>;
@@ -10,12 +11,12 @@ export interface ExtractionRunnerDeps {
   resolvePath: (...paths: string[]) => string;
   executeExtraction: (options: ExecuteExtractionOptions) => Promise<unknown>;
   executeActionSequence: (options: ExecuteActionSequenceOptions) => Promise<void>;
-  createSuccessfulResult: (data: unknown, meta: ExtractionResult['meta'], outputSchema?: Record<string, unknown>) => ExtractionResult;
+  createSuccessfulResult: (data: unknown, meta: ExtractionResult['meta'], outputSchema?: Record<string, unknown>, drift?: DriftReport) => ExtractionResult;
   registryCdnAllowlist: string[];
   getAppConnection: (connectionId: string) => Promise<{ domainPattern: string; status: string } | undefined>;
   saveCookies: (templateId: string, cookieString: string) => Promise<void>;
   getSavedCookies: (templateId: string) => Promise<string | undefined>;
-  executeMeasured: <T>(measure: { templateId: string; kind: RunKind }, operation: () => Promise<T>, enrichMeasure?: (result: T) => { driftDetected?: boolean; driftEntryCount?: number } | undefined) => Promise<T>;
+  executeMeasured: <T>(measure: { templateId: string; kind: RunKind }, operation: () => Promise<T>, enrichMeasure?: (result: T) => { driftDetected?: boolean; driftEntryCount?: number; driftEntries?: DriftReport['entries'] } | undefined) => Promise<T>;
   preExecutionMeasure: (templateId?: string, targetUrl?: string) => { templateId: string; kind: RunKind };
   reportProgress: (update: { tool: string; status: 'running' | 'done' | 'failed'; current: number; total: number; message: string }) => Promise<void>;
   logError: (message: string) => void;
@@ -113,6 +114,7 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
       if (!connectionId && cookieString) await deps.saveCookies(entry.templateId, cookieString);
       const effectiveCookies = connectionId ? undefined : cookieString || (useSavedCookies ? await deps.getSavedCookies(entry.templateId) : undefined);
       measurementStarted = true;
+      let drift: DriftReport | undefined;
       const data = await deps.executeMeasured(measure, () => deps.executeExtraction({
         targetUrl: resolvedUrl,
         scriptPath: entry.scriptPath,
@@ -126,11 +128,11 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
         onNetworkRequest,
       }), (result) => {
         if (!entry.outputSchema) return undefined;
-        const drift = checkDrift(entry.templateId, entry.outputSchema, result);
-        return { driftDetected: drift.hasDrift, driftEntryCount: drift.entries.length };
+        drift = checkDrift(entry.templateId, entry.outputSchema, result);
+        return { driftDetected: drift.hasDrift, driftEntryCount: drift.entries.length, driftEntries: drift.entries };
       });
       await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
-      return deps.createSuccessfulResult(data, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema);
+      return deps.createSuccessfulResult(data, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema, drift);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!measurementStarted) {

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ValidationResult } from './schema.js';
+import type { DriftEntry, DriftReport } from './drift.js';
 
 export type { ValidationResult } from './schema.js';
 
@@ -215,6 +216,7 @@ export interface ExtractionResult {
   error?: string;
   meta: ExtractionMeta;
   schemaValidation?: ValidationResult;
+  drift?: DriftReport;
 }
 
 export const RunKindSchema = z.enum(['extraction', 'action-sequence', 'static-http']);
@@ -230,6 +232,12 @@ export const MeasureRecordSchema = z
     error: z.string().optional(),
     driftDetected: z.boolean().optional(),
     driftEntryCount: z.number().int().nonnegative().optional(),
+    driftEntries: z.array(z.object({
+      path: z.string(),
+      kind: z.enum(['field_added', 'field_removed', 'type_changed']),
+      expected: z.string().optional(),
+      actual: z.string().optional(),
+    })).optional(),
   })
   .refine((record) => (record.success ? record.error === undefined : record.error !== undefined), {
     message: 'error must be absent when success is true and required when success is false',
@@ -249,4 +257,5 @@ export interface TemplateSla {
   lastError?: string;
   driftCount: number;
   lastDriftAt?: string;
+  driftEntries: DriftEntry[];
 }

@@ -133,6 +133,7 @@ function toSla(templateId: string, records: MeasureRecord[]): TemplateSla {
   const successCount = records.filter((record) => record.success).length;
   const latestFailure = [...sortedByTimestamp].reverse().find((record) => !record.success);
   const driftRecords = sortedByTimestamp.filter((record) => record.driftDetected === true);
+  const driftEntries = driftRecords.flatMap((record) => record.driftEntries ?? []);
   return {
     templateId,
     runs: records.length,
@@ -145,6 +146,7 @@ function toSla(templateId: string, records: MeasureRecord[]): TemplateSla {
     ...(latestFailure?.error ? { lastError: latestFailure.error } : {}),
     driftCount: driftRecords.length,
     ...(driftRecords.at(-1) ? { lastDriftAt: driftRecords.at(-1)!.timestamp } : {}),
+    driftEntries,
   };
 }
 

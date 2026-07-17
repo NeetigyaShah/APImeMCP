@@ -121,6 +121,7 @@ describe('metrics SLA store', () => {
         p95DurationMs: 0,
         lastRunAt: '2026-07-17T08:00:00.000Z',
         driftCount: 0,
+        driftEntries: [],
       },
     ]);
   });
