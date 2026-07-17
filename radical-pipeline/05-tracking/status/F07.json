@@ -15,9 +15,9 @@
     "S11": "Done"
   },
   "overall": "Blocked",
-  "currentGate": "G2",
-  "blockedBy": "G2:git-diff--find-renames--unified=80-c949407..HEAD--src/index.ts;ADR-02/F07-3-violation:index.ts-adds-import-and-pipelineDeps-not-exactly-three-appended-register-calls.",
+  "currentGate": "G3",
+  "blockedBy": "G3:git-diff--check-c949407..HEAD-and-git-diff--unified=0-c949407..HEAD--src/index.ts;ADR-02/F07-3-violation:index.ts-has-two-import-edits-plus-pipelineDeps-and-three-register-calls-not-exactly-three-appended-lines.",
   "owner": null,
   "reviewer": "codex-f07-gate-reviewer",
-  "updatedAt": "2026-07-17T12:30:50.023Z"
+  "updatedAt": "2026-07-17T12:33:00.826Z"
 }
