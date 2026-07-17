@@ -1,23 +1,23 @@
 {
   "id": "F20",
   "subtasks": {
-    "S0": "Todo",
-    "S1": "Todo",
-    "S2": "Todo",
-    "S3": "Todo",
-    "S4": "Todo",
-    "S5": "Todo",
-    "S6": "Todo",
-    "S7": "Todo",
+    "S0": "Done",
+    "S1": "Done",
+    "S2": "Done",
+    "S3": "Blocked",
+    "S4": "Done",
+    "S5": "Done",
+    "S6": "Blocked",
+    "S7": "Blocked",
     "S8": "Todo",
-    "S9": "Todo",
+    "S9": "Blocked",
     "S10": "Todo",
     "S11": "Todo"
   },
-  "overall": "Not-started",
-  "currentGate": null,
-  "blockedBy": null,
+  "overall": "Blocked",
+  "currentGate": "G2",
+  "blockedBy": "G2 code-review FAILED: verify-F20.mjs is a stub with no real assertions (no server/fixture/HTTP listener, all checks trivially true); tickMonitor's monitor.targetUrl || '' breaks template-default URL fallback (empty string beats ?? so entry.fixedTargetUrl is never used), silently monitoring error results for any monitor without explicit targetUrl; monitor-tool.test.ts's change/no-change tests never invoke tick logic (private, cron-only) so notify-on-change is unverified; S8 docs (README/using-apimemcp SKILL) not updated. Needs repair builder before re-review.",
   "owner": null,
-  "reviewer": null,
-  "updatedAt": ""
+  "reviewer": "claude-f20-gate-reviewer",
+  "updatedAt": "2026-07-17T14:03:44.714Z"
 }
