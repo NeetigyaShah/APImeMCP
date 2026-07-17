@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { createSuccessfulExtractionResult } from './engine.js';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { createSuccessfulExtractionResult, executeStaticHttpExtraction } from './engine.js';
+import type { ManifestEntry } from './types.js';
 
 const meta = {
   url: 'https://example.com/products',
@@ -27,3 +28,6 @@ describe('createSuccessfulExtractionResult', () => {
     expect(result.schemaValidation?.errors).not.toHaveLength(0);
   });
 });
+
+// executeStaticHttpExtraction integration tests are in scripts/verify-F15.mjs
+// Unit tests for executeStaticHttpExtraction require fs mocking which is tested in verify-F15

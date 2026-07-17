@@ -58,6 +58,55 @@ describe('RegisterExtractionTemplateInputSchema', () => {
       });
     }
   });
+
+  it('accepts kind being omitted (defaults to extraction at runtime)', () => {
+    const result = RegisterExtractionTemplateInputSchema.safeParse({
+      templateId: 'test',
+      domainPattern: 'example.com',
+      executableScript: 'x',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.kind).toBeUndefined();
+    }
+  });
+
+  it('accepts kind "static-http" with requestHeaders', () => {
+    const result = RegisterExtractionTemplateInputSchema.safeParse({
+      templateId: 'static-test',
+      domainPattern: 'example.com',
+      executableScript: '($) => ({ title: $("title").text() })',
+      kind: 'static-http',
+      requestHeaders: { 'User-Agent': 'Custom-Agent' },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.kind).toBe('static-http');
+      expect(result.data.requestHeaders).toEqual({ 'User-Agent': 'Custom-Agent' });
+    }
+  });
+
+  it('rejects static-http with readySelector', () => {
+    const result = RegisterExtractionTemplateInputSchema.safeParse({
+      templateId: 'bad-static',
+      domainPattern: 'example.com',
+      executableScript: 'x',
+      kind: 'static-http',
+      readySelector: '.data',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects static-http with waitStrategy', () => {
+    const result = RegisterExtractionTemplateInputSchema.safeParse({
+      templateId: 'bad-static',
+      domainPattern: 'example.com',
+      executableScript: 'x',
+      kind: 'static-http',
+      waitStrategy: 'networkidle',
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('ExecuteNativeExtractionInputSchema', () => {

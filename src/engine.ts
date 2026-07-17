@@ -4,7 +4,10 @@ import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { ActionSequence, ActionStep, ExtractionMeta, ExtractionResult, MeasureRecord, RunKind, WaitStrategy } from './types.js';
+import * as cheerio from 'cheerio';
+import { ProxyAgent } from 'undici';
+import type { ActionSequence, ActionStep, ExtractionMeta, ExtractionResult, MeasureRecord, RunKind, WaitStrategy, ManifestEntry } from './types.js';
+import { isStaticHttpEntry } from './types.js';
 import type { DriftReport } from './drift.js';
 import { recordMeasure } from './metrics.js';
 import { validateOutput } from './schema.js';
@@ -392,6 +395,42 @@ export async function executeExtraction(options: ExecuteExtractionOptions): Prom
       await context.close();
     }
   }
+}
+
+export async function executeStaticHttpExtraction(
+  entry: ManifestEntry,
+  targetUrl: string,
+  opts: { cookieString?: string; proxyUrl?: string } = {},
+): Promise<unknown> {
+  const headers: Record<string, string> = {
+    'User-Agent': USER_AGENT,
+    ...(entry.requestHeaders || {}),
+  };
+  if (opts.cookieString) {
+    headers['Cookie'] = opts.cookieString;
+  }
+
+  const dispatcher = opts.proxyUrl ? new ProxyAgent(opts.proxyUrl) : undefined;
+  const res = await fetch(targetUrl, { headers, dispatcher } as any);
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+
+  const html = await res.text();
+  const $ = cheerio.load(html);
+
+  // Read script from entry.scriptPath (stored templates) or use inline (for testing)
+  const script = await fs.readFile(path.resolve(process.cwd(), entry.scriptPath), 'utf8');
+  if (!script) throw new Error('scriptPath or executableScript is required');
+
+  // Create a function that executes the script with $ as the first argument
+  // The script can be either a bare function expression or a self-invoking one
+  const executeScriptInContext = (src: string) => {
+    // eslint-disable-next-line no-eval
+    const value = (0, eval)(src);
+    return typeof value === 'function' ? value($) : value;
+  };
+
+  const rawResult = executeScriptInContext(script);
+  return assertJsonSerializable(rawResult);
 }
 
 function mapSameSite(sameSite: unknown): 'Strict' | 'Lax' | 'None' {

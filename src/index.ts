@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ensureStorageInitialized, findTemplateById, findTemplateByUrl, loadManifest, registerTemplate } from './storage.js';
-import { closeBrowser, confirmOpenAppConnection, createSuccessfulExtractionResult, executeActionSequence, executeExtraction, executeMeasured, initBrowser, isBrowserReady, openAppConnection, REGISTRY_CDN_ALLOWLIST, renderPage, startConfiguredAppConnections } from './engine.js';
+import { closeBrowser, confirmOpenAppConnection, createSuccessfulExtractionResult, executeActionSequence, executeExtraction, executeStaticHttpExtraction, executeMeasured, initBrowser, isBrowserReady, openAppConnection, REGISTRY_CDN_ALLOWLIST, renderPage, startConfiguredAppConnections } from './engine.js';
 import { getSavedCookies, saveCookies } from './cookie-store.js';
 import { addFromRegistry, fetchRegistryManifest } from './registry-client.js';
 import { addCommunityTemplateCore } from './tools/add-community-template.js';
@@ -61,6 +61,7 @@ export const runExtraction = createExtractionRunner({
   resolvePath: path.resolve,
   executeExtraction,
   executeActionSequence,
+  executeStaticHttpExtraction,
   createSuccessfulResult: createSuccessfulExtractionResult,
   registryCdnAllowlist: REGISTRY_CDN_ALLOWLIST,
   getAppConnection,
