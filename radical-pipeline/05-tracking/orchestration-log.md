@@ -29,6 +29,7 @@
 - F01 final G3 rejected `b4decfe`: while schema validation is now at the engine boundary, `src/index.ts` still owns extraction orchestration and inline tool handlers. This exposes the uncompleted ADR-02 Wave 0 boundary; a fresh F01 architecture-repair builder is required.
 - F22 G2 rejected `9109a2d`: its discovery registration passes an inline dependency object instead of appending dependencies to the single shared `deps` object, violating ADR-02. A fresh F22 repair builder is required.
 - Sequencing note: F05 and F03 merged before blocked F01, despite the DAG's preferred Wave 1 foundation order. Neither declares a hard F01 dependency and both merge-result gates passed; F01 remains the next required Wave 1 foundation before F14/F19 integration. F22 is Wave 2 and remains unmerged pending F02.
+- F22 re-review rejected `b5053ec`: it repaired the shared dependency object but rewrote three existing registrations. ADR-02 requires the discovery registration to be the only appended call. A fresh narrow repair is queued; F22 remains held for Wave 2.
 
 ## Agent Failures
 
