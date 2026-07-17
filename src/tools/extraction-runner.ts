@@ -4,6 +4,13 @@ import { checkDrift } from '../drift.js';
 import type { DriftReport } from '../drift.js';
 import { applyTransform } from '../transform.js';
 import { withResultCache } from '../result-cache.js';
+import { compareSnapshot, saveSnapshot } from '../snapshot.js';
+import type { SnapshotComparison, SnapshotMode, GoldenSnapshot } from '../snapshot.js';
+
+export type SnapshotExtractionResult = ExtractionResult & {
+  snapshotRecorded?: GoldenSnapshot;
+  snapshotCheck?: SnapshotComparison;
+};
 
 export interface ExtractionRunnerDeps {
   loadManifest: () => Promise<Manifest>;
@@ -37,7 +44,8 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
     executableScript?: string,
     _kind = 'extraction',
     onNetworkRequest?: (url: string) => void,
-  ): Promise<ExtractionResult> {
+    snapshotMode: SnapshotMode = 'off',
+  ): Promise<SnapshotExtractionResult> {
     const isDryRun = executableScript !== undefined;
     const startedAt = Date.now();
     let measure = deps.preExecutionMeasure(templateId, targetUrl);
@@ -110,7 +118,8 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
         measurementStarted = true;
         await deps.executeMeasured(measure, () => deps.executeActionSequence({ sequence, proxyUrl, simulateLowBandwidth, headful, connectionId, networkAllowlist: entry.source === 'registry' ? entry.allowedDomains ?? [] : undefined, onNetworkRequest }));
         await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
-        return deps.createSuccessfulResult({ completedSteps: sequence.steps.length }, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema);
+        const result = deps.createSuccessfulResult({ completedSteps: sequence.steps.length }, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema);
+        return applySnapshot(result, entry.templateId, resolvedUrl, entry.outputSchema, snapshotMode);
       }
 
       if (!connectionId && cookieString) await deps.saveCookies(entry.templateId, cookieString);
@@ -136,9 +145,10 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
         });
         await deps.reportProgress({ tool: 'execute_native_extraction', status: 'done', current: 1, total: 1, message: resolvedUrl });
         const transformedData = entry.transform ? applyTransform(data, entry.transform) : data;
-        return deps.createSuccessfulResult(transformedData, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema, drift);
+        const result = deps.createSuccessfulResult(transformedData, buildMeta(entry.templateId, entry.domainPattern, resolvedUrl), entry.outputSchema, drift);
+        return applySnapshot(result, entry.templateId, resolvedUrl, entry.outputSchema, snapshotMode);
       };
-      if (connectionId) return run();
+      if (connectionId || snapshotMode !== 'off') return run();
       return await withResultCache(
         { templateId: entry.templateId, targetUrl: resolvedUrl, cookieString: effectiveCookies, proxyUrl },
         run,
@@ -156,6 +166,22 @@ export function createExtractionRunner(deps: ExtractionRunnerDeps) {
       return { success: false, error: message, meta: buildMeta(templateId ?? '', '', targetUrl ?? '') };
     }
   };
+}
+
+async function applySnapshot(
+  result: ExtractionResult,
+  templateId: string,
+  targetUrl: string,
+  outputSchema: Record<string, unknown> | undefined,
+  snapshotMode: SnapshotMode,
+): Promise<SnapshotExtractionResult> {
+  if (snapshotMode === 'record') {
+    return { ...result, snapshotRecorded: await saveSnapshot(templateId, result.data, { targetUrl, outputSchema }) };
+  }
+  if (snapshotMode === 'check') {
+    return { ...result, snapshotCheck: await compareSnapshot(templateId, result.data) };
+  }
+  return result;
 }
 
 async function recordFailedRun(

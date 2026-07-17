@@ -1,4 +1,5 @@
-import type { RegisterExtractionTemplateInput, ExtractionResult, ManifestEntry } from '../types.js';
+import type { RegisterExtractionTemplateInput, ManifestEntry } from '../types.js';
+import type { SnapshotExtractionResult } from './extraction-runner.js';
 import type { AppConnection, ConnectAppInput } from '../types.js';
 import type { ScheduledJob } from '../scheduler.js';
 
@@ -14,7 +15,8 @@ export type ExtractionRunner = (
   executableScript?: string,
   kind?: string,
   onNetworkRequest?: (url: string) => void,
-) => Promise<ExtractionResult>;
+  snapshotMode?: import('../snapshot.js').SnapshotMode,
+) => Promise<SnapshotExtractionResult>;
 
 export interface ToolDeps {
   appConnections: {

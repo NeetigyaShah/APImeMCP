@@ -6,6 +6,7 @@ dist/
 Thumbs.db
 output/
 templates/
+templates/snapshots/
 apis/
 bernhardt/
 .mcp-progress.json

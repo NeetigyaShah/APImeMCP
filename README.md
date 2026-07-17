@@ -28,7 +28,9 @@ with exact input/output shapes and example calls.
    from a domain pattern to that script in `templates/manifest.json`.
 2. `execute_native_extraction` opens the target URL in an isolated Playwright browser
    context, waits for the page to reach `networkidle`, evaluates the matching script,
-   and returns the result. Every successful run logs a metric row automatically.
+   and returns the result. Every successful run logs a metric row automatically. Pass
+   `snapshot: "record"` to save a per-template golden result, or `snapshot: "check"`
+   to compare against it and receive a value-level regression diff.
 3. `batch_download_assets` takes a list of URLs (e.g. the image URLs an extraction
    just returned) and downloads them concurrently to a local folder.
 4. `schedule_stock_check` registers a cron-scheduled recurring extraction, persisted
@@ -409,8 +411,9 @@ Run a registered template against a URL.
 | `proxyUrl` | string, optional | e.g. `http://user:pass@host:port`, passed through to Playwright's `context.newContext({ proxy })` for routing through an authorized egress proxy or testing region-specific rendering. No automated rotation. |
 | `executableScript` | non-empty string, optional | inline script for a non-persistent dry-run. When present, it bypasses template lookup and returns `dryRun: true`; an explicitly empty value is rejected. |
 | `outputSchema` | JSON Schema object, optional | draft schema validated when the optional schema validator is available; otherwise omitted without failing the dry-run. |
+| `snapshot` | `'off'\|'record'\|'check'`, optional | record a golden result or compare against the saved per-template snapshot; defaults to `off`. |
 
-Returns `{ success, data?, error?, meta: { url, templateId, domainMatched, durationMs, timestamp }, schemaValidation? }`. `schemaValidation` is present only when the template declares `outputSchema`, and contains `{ valid, errors? }`.
+Returns `{ success, data?, error?, meta: { url, templateId, domainMatched, durationMs, timestamp }, schemaValidation?, snapshotRecorded?, snapshotCheck? }`. `schemaValidation` is present only when the template declares `outputSchema`, and contains `{ valid, errors? }`; snapshot fields are present only for the selected mode. Golden files are stored locally under `templates/snapshots/`.
 Registered-template runs automatically append a row to `templates/extraction_metrics.csv` (see `get_extraction_stats` below) — no separate step required; dry-runs persist neither metrics nor any other storage state.
 
 If the resolved template was registered as an **action-sequence** (via the recorder
